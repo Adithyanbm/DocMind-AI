@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import api from '../services/api';
+import api, { forgotPassword as apiForgotPassword, resetPassword as apiResetPassword } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext(null);
@@ -64,7 +64,10 @@ export const AuthProvider = ({ children }) => {
         last_name: lastName,
       });
 
-      // After successful registration, log them in or redirect to verify email
+      // Save email for the verification screen
+      localStorage.setItem('pending_verification_email', email);
+
+      // After successful registration, redirect to verify email
       navigate('/verify-email');
       return { success: true };
       
@@ -82,6 +85,60 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const verifyEmail = async (email, code) => {
+    try {
+      await api.post('/auth/verify-email/', { email, code });
+      // Clear the pending email
+      localStorage.removeItem('pending_verification_email');
+      // Redirect to signin
+      navigate('/signin');
+      return { success: true };
+    } catch (error) {
+       console.error('Verification Error:', error);
+       return { 
+         success: false, 
+         error: error.response?.data?.error || 'Invalid verification code' 
+       };
+    }
+  };
+
+  const resendVerificationCode = async (email) => {
+    try {
+      await api.post('/auth/resend-code/', { email });
+      return { success: true };
+    } catch (error) {
+       console.error('Resend Code Error:', error);
+       return { 
+         success: false, 
+         error: error.response?.data?.error || 'Failed to resend code' 
+       };
+    }
+  };
+
+  const forgotPassword = async (email) => {
+    try {
+      await apiForgotPassword(email);
+      localStorage.setItem('pending_reset_email', email);
+      navigate('/reset-password');
+      return { success: true };
+    } catch (error) {
+      console.error('Forgot Password Error:', error);
+      return { success: false, error: error };
+    }
+  };
+
+  const resetPassword = async (email, code, newPassword) => {
+    try {
+      await apiResetPassword(email, code, newPassword);
+      localStorage.removeItem('pending_reset_email');
+      navigate('/signin');
+      return { success: true };
+    } catch (error) {
+       console.error('Reset Password Error:', error);
+       return { success: false, error: error };
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('access');
     localStorage.removeItem('refresh');
@@ -95,6 +152,10 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: !!user,
     login,
     register,
+    verifyEmail,
+    resendVerificationCode,
+    forgotPassword,
+    resetPassword,
     logout,
   };
 

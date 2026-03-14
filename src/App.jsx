@@ -5,6 +5,9 @@ import LandingPage from './pages/LandingPage';
 import SignIn from './pages/SignIn';
 import SignUp from './pages/SignUp';
 import VerifyEmail from './pages/VerifyEmail';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import NotFound from './pages/NotFound';
 
 function App() {
   return (
@@ -18,6 +21,9 @@ function App() {
             <Route path="/signin" element={<SignIn />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </div>
       </AuthProvider>

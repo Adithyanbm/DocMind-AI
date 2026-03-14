@@ -64,4 +64,22 @@ api.interceptors.response.use(
   }
 );
 
+export const forgotPassword = async (email) => {
+  try {
+    const response = await api.post('/auth/forgot-password/', { email });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data?.error || 'Failed to request password reset';
+  }
+};
+
+export const resetPassword = async (email, code, new_password) => {
+  try {
+    const response = await api.post('/auth/reset-password/', { email, code, new_password });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data?.error || 'Failed to reset password. The code might be invalid or expired.';
+  }
+};
+
 export default api;

@@ -66,7 +66,7 @@ const SignIn = () => {
           <div className="form-group">
             <div className="label-row">
               <label htmlFor="password">Password</label>
-              <a href="#" className="forgot-password">Forgot password?</a>
+              <Link to="/forgot-password" className="forgot-password">Forgot password?</Link>
             </div>
             <div className="input-with-icon">
               <Lock size={18} className="input-icon" />
