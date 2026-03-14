@@ -1,31 +1,34 @@
-import { BrainCircuit } from 'lucide-react';
-import './Navbar.css'; // We'll create a module or just use plain CSS classes, let's use plain CSS
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { Menu, Zap } from 'lucide-react';
+import './Navbar.css';
 
 const Navbar = () => {
   return (
     <nav className="navbar">
       <div className="navbar-container">
-        {/* Logo */}
-        <div className="navbar-logo">
-          <div className="logo-icon">
-            <BrainCircuit size={20} color="#38bdf8" />
+        <Link to="/" className="navbar-logo">
+          <div className="logo-mark">
+            <Zap size={20} color="var(--primary)" fill="var(--primary)" />
           </div>
-          <span className="logo-text">DocMind AI</span>
-        </div>
-
-        {/* Links */}
+          <span className="text-main font-bold">DocMind AI</span>
+        </Link>
+        
         <div className="navbar-links">
-          <a href="#features">Features</a>
-          <a href="#use-cases">Use Cases</a>
-          <a href="#pricing">Pricing</a>
-          <a href="#contact">Contact</a>
+          <a href="#features" className="nav-link">Features</a>
+          <a href="#use-cases" className="nav-link">Use Cases</a>
+          <a href="#pricing" className="nav-link">Pricing</a>
+          <a href="#contact" className="nav-link">Contact</a>
         </div>
 
-        {/* Actions */}
         <div className="navbar-actions">
-          <a href="#signin" className="login-link">Sign In</a>
-          <button className="btn btn-primary btn-sm">Get Started</button>
+          <Link to="/signin" className="nav-link sign-in-btn">Sign In</Link>
+          <Link to="/signup" className="btn btn-primary btn-sm">Get Started</Link>
         </div>
+        
+        <button className="mobile-menu-btn">
+          <Menu size={24} />
+        </button>
       </div>
     </nav>
   );

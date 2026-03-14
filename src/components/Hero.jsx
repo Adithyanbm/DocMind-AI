@@ -1,14 +1,13 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowRight, Play, FileText, BrainCircuit, Activity } from 'lucide-react';
 import './Hero.css';
 
 const Hero = () => {
   return (
     <section className="hero">
-      <div className="ambient-glow"></div>
       
       <div className="hero-container">
-
 
         {/* Headline */}
         <h1 className="hero-title animate-fade-up delay-100">
@@ -23,9 +22,9 @@ const Hero = () => {
 
         {/* CTA Buttons */}
         <div className="hero-actions animate-fade-up delay-300">
-          <button className="btn btn-primary">
+          <Link to="/signup" className="btn btn-primary">
             Get Started <ArrowRight size={18} />
-          </button>
+          </Link>
           <button className="btn btn-ghost">
             <Play size={18} fill="currentColor" /> Watch Demo
           </button>
