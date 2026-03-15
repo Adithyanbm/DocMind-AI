@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { GoogleLogin } from '@react-oauth/google';
 import './Auth.css'; // Shared auth styles
 
 const SignIn = () => {
@@ -9,7 +10,17 @@ const SignIn = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
+  
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setIsSubmitting(true);
+    setError('');
+    const result = await loginWithGoogle(credentialResponse.credential);
+    if (!result.success) {
+      setError(result.error || 'Google Sign-In failed');
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSignIn = async (e) => {
     e.preventDefault();
@@ -86,7 +97,21 @@ const SignIn = () => {
           </button>
         </form>
 
-        <div className="auth-footer">
+        <div className="auth-divider">
+          <span>or continue with</span>
+        </div>
+
+        <div className="google-auth-wrapper" style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem' }}>
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => {
+              setError('Google Sign-In was unsuccessful. Try again.');
+            }}
+            useOneTap
+          />
+        </div>
+
+        <div className="auth-footer" style={{ marginTop: '1.5rem' }}>
           <p>Don't have an account? <Link to="/signup" className="auth-link">Sign up</Link></p>
         </div>
       </div>

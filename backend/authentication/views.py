@@ -2,9 +2,11 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
 from .serializers import RegisterSerializer
 from .models import UserProfile
+from .google_auth import verify_google_oauth_token
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -212,3 +214,58 @@ class ResetPasswordView(APIView):
         
         return Response({'message': 'Password has been reset successfully'}, status=status.HTTP_200_OK)
 
+
+class GoogleLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        token = request.data.get('token')
+        
+        if not token:
+            return Response({'error': 'Google token is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        idinfo = verify_google_oauth_token(token)
+        
+        if not idinfo:
+            return Response({'error': 'Invalid Google token'}, status=status.HTTP_400_BAD_REQUEST)
+
+        email = idinfo.get('email')
+        first_name = idinfo.get('given_name', '')
+        last_name = idinfo.get('family_name', '')
+        
+        if not email:
+            return Response({'error': 'Email not provided by Google'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            # Check if user already exists
+            user = User.objects.get(email=email)
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            
+            # Since they authenticated with Google, their email is inherently verified
+            if not profile.is_email_verified:
+                profile.is_email_verified = True
+                profile.save()
+                
+        except User.DoesNotExist:
+            # Create a new user
+            user = User.objects.create_user(
+                username=email, # Use email as username
+                email=email,
+                first_name=first_name,
+                last_name=last_name
+            )
+            # Create the profile and mark email as verified
+            profile = UserProfile.objects.create(user=user, is_email_verified=True)
+
+        # Generate tokens
+        refresh = RefreshToken.for_user(user)
+
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name
+            }
+        }, status=status.HTTP_200_OK)

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, Lock, User, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { GoogleLogin } from '@react-oauth/google';
 import './Auth.css'; 
 
 const SignUp = () => {
@@ -10,7 +11,18 @@ const SignUp = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { register } = useAuth();
+  const { register, loginWithGoogle } = useAuth();
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setIsSubmitting(true);
+    setError('');
+    // Google Register is essentially the same as Google Login since the backend handles creation
+    const result = await loginWithGoogle(credentialResponse.credential);
+    if (!result.success) {
+      setError(result.error || 'Google Sign-Up failed');
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSignUp = async (e) => {
     e.preventDefault();
@@ -99,6 +111,21 @@ const SignUp = () => {
             {isSubmitting ? 'Creating Account...' : <><>Sign Up</> <ArrowRight size={18} /></>}
           </button>
         </form>
+
+        <div className="auth-divider" style={{ textAlign: 'center', margin: '1.5rem 0', position: 'relative' }}>
+          <span style={{ background: '#fff', padding: '0 10px', color: '#64748b', fontSize: '0.875rem', zIndex: 1, position: 'relative' }}>or continue with</span>
+          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: '1px', background: '#e2e8f0', zIndex: 0 }}></div>
+        </div>
+
+        <div className="google-auth-wrapper" style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => {
+              setError('Google Sign-Up was unsuccessful. Try again.');
+            }}
+            text="signup_with"
+          />
+        </div>
 
         <div className="auth-footer">
           <p>Already have an account? <Link to="/signin" className="auth-link">Sign in</Link></p>

@@ -146,6 +146,28 @@ export const AuthProvider = ({ children }) => {
     navigate('/signin');
   };
 
+  const loginWithGoogle = async (googleToken) => {
+    try {
+      const response = await api.post('/auth/google/', { token: googleToken });
+      
+      const { access, refresh, user: userData } = response.data;
+      
+      localStorage.setItem('access', access);
+      localStorage.setItem('refresh', refresh);
+      
+      setUser({ authenticated: true, ...userData });
+      navigate('/dashboard');
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Google Login Error:', error);
+      return { 
+        success: false, 
+        error: error.response?.data?.error || 'Failed to authenticate with Google' 
+      };
+    }
+  };
+
   const value = {
     user,
     loading,
@@ -157,6 +179,7 @@ export const AuthProvider = ({ children }) => {
     forgotPassword,
     resetPassword,
     logout,
+    loginWithGoogle,
   };
 
   return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;

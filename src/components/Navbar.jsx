@@ -1,9 +1,17 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Menu, Zap } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import './Navbar.css';
 
 const Navbar = () => {
+  const { isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
   return (
     <nav className="navbar">
       <div className="navbar-container">
@@ -22,8 +30,17 @@ const Navbar = () => {
         </div>
 
         <div className="navbar-actions">
-          <Link to="/signin" className="nav-link sign-in-btn">Sign In</Link>
-          <Link to="/signup" className="btn btn-primary btn-sm">Get Started</Link>
+          {isAuthenticated ? (
+            <>
+              <Link to="/dashboard" className="nav-link sign-in-btn">Dashboard</Link>
+              <button onClick={handleLogout} className="btn btn-primary btn-sm">Log Out</button>
+            </>
+          ) : (
+            <>
+              <Link to="/signin" className="nav-link sign-in-btn">Sign In</Link>
+              <Link to="/signup" className="btn btn-primary btn-sm">Get Started</Link>
+            </>
+          )}
         </div>
         
         <button className="mobile-menu-btn">
