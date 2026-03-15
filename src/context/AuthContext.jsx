@@ -142,18 +142,21 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('access');
     localStorage.removeItem('refresh');
+    localStorage.removeItem('google_access_token');
     setUser(null);
     navigate('/signin');
   };
 
   const loginWithGoogle = async (googleToken) => {
     try {
+      // The frontend now passes an access_token with drive.file scopes
       const response = await api.post('/auth/google/', { token: googleToken });
       
       const { access, refresh, user: userData } = response.data;
       
       localStorage.setItem('access', access);
       localStorage.setItem('refresh', refresh);
+      localStorage.setItem('google_access_token', googleToken); // Save for background sync
       
       setUser({ authenticated: true, ...userData });
       navigate('/dashboard');

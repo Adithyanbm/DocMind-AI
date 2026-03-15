@@ -1,0 +1,27 @@
+
+--- Save at 2026-03-15 16:03:05.545269 ---
+File ID passed from frontend: None
+Messages count: 2
+ [user]: wait an minute how are you
+ [assistant]: I’m just a bundle of algorithms, so I don’t have f
+Upload result: {'success': True, 'file_id': '1SBr24j3yeJCD6jXliau_zss6b2iORgS9', 'name': 'DocMind_Chat_wait_an_minute_how_are_you.md', 'link': 'https://drive.google.com/file/d/1SBr24j3yeJCD6jXliau_zss6b2iORgS9/view?usp=drivesdk'}
+
+--- Save at 2026-03-15 16:03:21.314730 ---
+File ID passed from frontend: 1SBr24j3yeJCD6jXliau_zss6b2iORgS9
+Messages count: 4
+ [user]: wait an minute how are you
+ [assistant]: I’m just a bundle of algorithms, so I don’t have f
+ [user]: these just old meme
+ [assistant]: Got it—sounds like the replies blew up out of the 
+Upload result: {'success': False, 'error': 'Got an unexpected keyword argument newRevision'}
+
+--- Save at 2026-03-15 16:03:39.079783 ---
+File ID passed from frontend: 1SBr24j3yeJCD6jXliau_zss6b2iORgS9
+Messages count: 6
+ [user]: wait an minute how are you
+ [assistant]: I’m just a bundle of algorithms, so I don’t have f
+ [user]: these just old meme
+ [assistant]: Got it—sounds like the replies blew up out of the 
+ [user]: nooo
+ [assistant]: I’m sorry that hit the wrong beat. Let’s start ove
+Upload result: {'success': False, 'error': 'Got an unexpected keyword argument newRevision'}

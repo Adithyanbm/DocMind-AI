@@ -4,7 +4,7 @@ from django.http import StreamingHttpResponse, JsonResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from openai import OpenAI
-from .drive_service import upload_chat_to_drive
+from .drive_service import upload_chat_to_drive, list_drive_chats, get_drive_chat_content
 
 NVIDIA_API_KEY = os.environ.get('NVIDIA_API_KEY')
 
@@ -74,6 +74,7 @@ def save_to_drive(request):
     try:
         messages = request.data.get('messages', [])
         google_token = request.data.get('google_token')
+        file_id = request.data.get('file_id') # Support updating existing file
         
         if not messages:
             return JsonResponse({'error': 'Messages payload is required'}, status=400)
@@ -81,13 +82,56 @@ def save_to_drive(request):
         if not google_token:
             return JsonResponse({'error': 'Google access token is required'}, status=400)
             
-        result = upload_chat_to_drive(google_token, messages)
+        result = upload_chat_to_drive(google_token, messages, file_id)
         
         if result.get("success"):
             return JsonResponse(result, status=200)
         else:
             return JsonResponse(result, status=500)
             
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': str(e)}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_chat_history(request):
+    """
+    Returns a list of chat files found in the user's Google Drive.
+    Expects google_token as a query parameter.
+    """
+    try:
+        google_token = request.GET.get('google_token')
+        if not google_token:
+            return JsonResponse({'error': 'Google access token is required'}, status=400)
+            
+        result = list_drive_chats(google_token)
+        if result.get("success"):
+            return JsonResponse(result, status=200)
+        else:
+            return JsonResponse(result, status=500)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': str(e)}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_chat_session(request, file_id):
+    """
+    Returns the content of a specific chat file from Google Drive.
+    """
+    try:
+        google_token = request.GET.get('google_token')
+        if not google_token:
+            return JsonResponse({'error': 'Google access token is required'}, status=400)
+            
+        result = get_drive_chat_content(google_token, file_id)
+        if result.get("success"):
+            return JsonResponse(result, status=200)
+        else:
+            return JsonResponse(result, status=500)
     except Exception as e:
         import traceback
         traceback.print_exc()

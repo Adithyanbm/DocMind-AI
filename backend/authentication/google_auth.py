@@ -1,24 +1,25 @@
-from google.oauth2 import id_token
-from google.auth.transport import requests
+import urllib.request
+import urllib.error
+import json
 import os
 
 def verify_google_oauth_token(token):
     """
-    Verifies a Google OAuth JWT token and returns the payload if valid.
+    Verifies a Google OAuth Access Token and returns the payload if valid.
     Returns None if validation fails.
     """
     try:
-        # Note: In a production environment, you must pass the client ID 
-        # to ensure the token was meant for this specific application.
-        client_id = os.getenv('GOOGLE_CLIENT_ID')
-        
-        # Specify the CLIENT_ID of the app that accesses the backend
-        idinfo = id_token.verify_oauth2_token(token, requests.Request(), client_id)
-        
-        # idinfo contains claims like:
-        # { 'iss': 'accounts.google.com', 'aud': '...', 'sub': '...', 'email': '...', ... }
-        return idinfo
-    except ValueError as e:
-        # Invalid token
+        req = urllib.request.Request(f'https://oauth2.googleapis.com/tokeninfo?access_token={token}')
+        with urllib.request.urlopen(req) as response:
+            if response.status == 200:
+                data = json.loads(response.read().decode('utf-8'))
+                return data
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8')
+        print(f"Token verification HTTPError: {e.code} - {error_body}")
+        return None
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Token verification failed: {e}")
         return None

@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useGoogleLogin } from '@react-oauth/google';
 import './Dashboard.css';
 
 const Dashboard = () => {
@@ -15,6 +14,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   
   const [messages, setMessages] = useState([]);
+  const messagesRef = useRef([]); // Add ref for messages
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
@@ -26,38 +26,111 @@ const Dashboard = () => {
   
   const [isSaving, setIsSaving] = useState(false);
 
-  const googleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      setIsSaving(true);
-      try {
-        const token = localStorage.getItem('access');
-        const res = await fetch('http://localhost:8000/api/chat/save-to-drive/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            messages: messages.filter(m => m.role !== 'system'),
-            google_token: tokenResponse.access_token
-          })
-        });
-        
-        const data = await res.json();
-        if (data.success) {
-          alert("Chat saved to Google Drive successfully!");
-        } else {
-          alert("Failed to save chat: " + data.error);
-        }
-      } catch (err) {
-        console.error("Drive upload error", err);
-        alert("An error occurred while saving to Drive.");
-      } finally {
-        setIsSaving(false);
+  const [recentChats, setRecentChats] = useState([]);
+  const [currentFileId, setCurrentFileId] = useState(null);
+  const currentFileIdRef = useRef(null); // Add ref for fileId
+  
+  // Sync state to refs
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+  
+  useEffect(() => {
+    currentFileIdRef.current = currentFileId;
+  }, [currentFileId]);
+
+  // Fetch recent chats from Google Drive
+  const fetchRecentChats = async () => {
+    try {
+      const accessToken = localStorage.getItem('access');
+      const googleToken = localStorage.getItem('google_access_token');
+      if (!accessToken || !googleToken) return;
+
+      const res = await fetch(`http://localhost:8000/api/chat/history/?google_token=${googleToken}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRecentChats(data.files);
       }
-    },
-    scope: 'https://www.googleapis.com/auth/drive.file'
-  });
+    } catch (err) {
+      console.error("Failed to fetch recent chats", err);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchRecentChats();
+    }
+  }, [isAuthenticated]);
+
+  const loadChat = async (fileId) => {
+    try {
+      const accessToken = localStorage.getItem('access');
+      const googleToken = localStorage.getItem('google_access_token');
+      
+      const res = await fetch(`http://localhost:8000/api/chat/history/${fileId}/?google_token=${googleToken}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        // Parse the markdown content back into messages (simplified approach)
+        const parsedMessages = [];
+        const blocks = data.content.split(/\*\*(You|DocMind AI):\*\*/).filter(Boolean);
+        
+        for (let i = 1; i < blocks.length; i += 2) {
+          const role = blocks[i].trim() === 'You' ? 'user' : 'assistant';
+          const content = blocks[i+1]?.trim() || '';
+          if (content && !content.startsWith("# DocMind AI")) {
+            parsedMessages.push({ role, content });
+          }
+        }
+        
+        setMessages(parsedMessages);
+        setCurrentFileId(fileId);
+        if (window.innerWidth <= 768) setSidebarOpen(false);
+      }
+    } catch (err) {
+      console.error("Failed to load chat", err);
+    }
+  };
+
+  const autoSaveToDrive = async (msgsToSave) => {
+    try {
+      const accessToken = localStorage.getItem('access');
+      const googleToken = localStorage.getItem('google_access_token');
+      if (!accessToken || !googleToken) return;
+
+      setIsSaving(true);
+      const fileIdToUse = currentFileIdRef.current;
+      
+      const res = await fetch('http://localhost:8000/api/chat/save-to-drive/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          messages: msgsToSave.filter(m => m.role !== 'system'),
+          google_token: googleToken,
+          file_id: fileIdToUse
+        })
+      });
+      
+      const data = await res.json();
+      if (data.success && data.file_id) {
+        if (!fileIdToUse) {
+          setCurrentFileId(data.file_id);
+          fetchRecentChats(); // Refresh sidebar with new file
+        }
+      }
+    } catch (err) {
+      console.error("Auto-save failed", err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -160,6 +233,9 @@ const Dashboard = () => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
 
+      let assistantContent = '';
+      let assistantReasoning = '';
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -176,15 +252,23 @@ const Dashboard = () => {
               const data = JSON.parse(dataStr);
               if (data.choices && data.choices[0].delta) {
                 const delta = data.choices[0].delta;
+                
+                if (delta.content) {
+                  assistantContent += delta.content;
+                }
+                if (delta.reasoning_content) {
+                  assistantReasoning += delta.reasoning_content;
+                }
+                
                 setMessages(prev => {
                   const newMsgs = [...prev];
                   const lastMsg = { ...newMsgs[newMsgs.length - 1] };
                   
                   if (delta.content) {
-                    lastMsg.content += delta.content;
+                    lastMsg.content = assistantContent;
                   }
                   if (delta.reasoning_content) {
-                    lastMsg.reasoning_content = (lastMsg.reasoning_content || '') + delta.reasoning_content;
+                    lastMsg.reasoning_content = assistantReasoning;
                   }
                   
                   newMsgs[newMsgs.length - 1] = lastMsg;
@@ -197,6 +281,17 @@ const Dashboard = () => {
           }
         }
       }
+      
+      // Stream finished. Construct the exact final state without relying on functional `prev`
+      const finalAssistantMessage = {
+          role: 'assistant',
+          content: assistantContent,
+          reasoning_content: assistantReasoning
+      };
+      
+      const sessionMessagesToSave = [...apiMessages, finalAssistantMessage];
+      autoSaveToDrive(sessionMessagesToSave);
+
     } catch (error) {
       console.error('Chat error:', error);
       setMessages(prev => {
@@ -227,7 +322,7 @@ const Dashboard = () => {
           </button>
         </div>
 
-        <button className="new-chat-btn" onClick={() => setMessages([])}>
+        <button className="new-chat-btn" onClick={() => { setMessages([]); setCurrentFileId(null); }}>
           <div className="new-chat-content">
             <div className="docmind-icon"><Bot size={16} /></div>
             <span>New chat</span>
@@ -242,11 +337,21 @@ const Dashboard = () => {
         </div>
 
         <div className="sidebar-recents">
-          <div className="recents-header">Recents</div>
-          <a href="#" className="recent-link">DocMind AI splash screen...</a>
-          <a href="#" className="recent-link">Virtual dental treatment plan...</a>
-          <a href="#" className="recent-link">Smart transplant organ via...</a>
-          <a href="#" className="recent-link">AI Medical coding audit a...</a>
+          <div className="recents-header">Recents (Google Drive)</div>
+          {recentChats.length === 0 ? (
+            <div className="recent-link" style={{ opacity: 0.5 }}>No recent chats found.</div>
+          ) : (
+            recentChats.map(chat => (
+              <a 
+                key={chat.id} 
+                href="#" 
+                className={`recent-link ${currentFileId === chat.id ? 'active' : ''}`}
+                onClick={(e) => { e.preventDefault(); loadChat(chat.id); }}
+              >
+                {chat.name.replace('DocMind_Chat_', '').replace('.md', '').replaceAll('_', ' ')}
+              </a>
+            ))
+          )}
         </div>
 
         <div className="sidebar-footer">
@@ -270,17 +375,10 @@ const Dashboard = () => {
              </button>
           )}
           <div className="header-right-controls" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            {messages.length > 0 && (
-              <button 
-                className="icon-btn" 
-                onClick={() => googleLogin()} 
-                disabled={isSaving}
-                title="Save chat to Google Drive"
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0.5rem', borderRadius: '4px', border: '1px solid #3f3f3f', fontSize: '0.8rem' }}
-              >
-                <HardDrive size={14} />
-                {isSaving ? "Saving..." : "Save to Drive"}
-              </button>
+            {isSaving && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#888' }}>
+                <HardDrive size={14} className="saving-spinner" /> Saving to Drive...
+              </div>
             )}
             <div className="model-selector">
                GPT-OSS-20b <ChevronDown size={14} />
