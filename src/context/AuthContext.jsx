@@ -14,10 +14,16 @@ export const AuthProvider = ({ children }) => {
     const checkAuthStatus = () => {
       const accessToken = localStorage.getItem('access');
       if (accessToken) {
-        // We could verify the token by fetching user details 
-        // For now, we'll just set them as authenticated if a token exists
-        // A more robust solution would decode the JWT to get basic user info
-        setUser({ authenticated: true });
+        const storedUserData = localStorage.getItem('docmind_user');
+        if (storedUserData) {
+          try {
+            setUser({ authenticated: true, ...JSON.parse(storedUserData) });
+          } catch (e) {
+            setUser({ authenticated: true });
+          }
+        } else {
+          setUser({ authenticated: true });
+        }
       }
       setLoading(false);
     };
@@ -36,6 +42,7 @@ export const AuthProvider = ({ children }) => {
       
       localStorage.setItem('access', access);
       localStorage.setItem('refresh', refresh);
+      localStorage.setItem('docmind_user', JSON.stringify({ email }));
       
       setUser({ authenticated: true, email });
       navigate('/');
@@ -143,6 +150,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('access');
     localStorage.removeItem('refresh');
     localStorage.removeItem('google_access_token');
+    localStorage.removeItem('docmind_user');
     setUser(null);
     navigate('/signin');
   };
@@ -157,6 +165,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('access', access);
       localStorage.setItem('refresh', refresh);
       localStorage.setItem('google_access_token', googleToken); // Save for background sync
+      localStorage.setItem('docmind_user', JSON.stringify(userData));
       
       setUser({ authenticated: true, ...userData });
       navigate('/dashboard');

@@ -22,9 +22,17 @@ def upload_chat_to_drive(access_token, messages, file_id=None):
         title_summary = "New Chat"
         for msg in messages:
             if msg.get("role") == "user":
-                user_text = msg.get("content", "")[:30].strip()
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    text_parts = [p.get("text", "") for p in content if p.get("type") == "text"]
+                    user_text = " ".join(text_parts)[:30].strip()
+                    original_len = len(" ".join(text_parts))
+                else:
+                    user_text = str(content)[:30].strip()
+                    original_len = len(str(content))
+                    
                 title_summary = "".join([c if c.isalnum() or c in [' ', '-', '_'] else "" for c in user_text])
-                if len(msg.get("content", "")) > 30:
+                if original_len > 30:
                     title_summary += "..."
                 break
         
@@ -37,6 +45,23 @@ def upload_chat_to_drive(access_token, messages, file_id=None):
         for msg in messages:
             role = "You" if msg.get("role") == "user" else "DocMind AI"
             content = msg.get("content", "")
+            
+            # If the content is a list (e.g., from Vision API), extract just the text parts
+            # and format the image as an inline markdown image.
+            if isinstance(content, list):
+                text_parts = []
+                # Keep tracking if we found an image url among the content
+                for part in content:
+                    if part.get("type") == "text":
+                        text_parts.append(part.get("text", ""))
+                    elif part.get("type") == "image_url":
+                        img_url = part.get("image_url", {}).get("url", "")
+                        if img_url:
+                            # Embed the base64 code strictly as a markdown image format
+                            text_parts.append(f"![Attached Image]({img_url})")
+                
+                content = "\n\n".join(text_parts)
+                
             formatted_content += f"**{role}:**\n{content}\n\n"
             
         file_content = io.BytesIO(formatted_content.encode('utf-8'))
