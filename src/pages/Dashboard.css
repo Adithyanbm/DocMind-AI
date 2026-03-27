@@ -600,9 +600,15 @@ html:has(.claude-dashboard) {
 .markdown-body {
   font-size: 1rem;
   line-height: 1.6;
+  white-space: normal !important;
 }
 
 .markdown-body p { margin-bottom: 0.6em; margin-top: 0; }
+.markdown-body p:empty,
+.markdown-body p:has(br:only-child),
+.markdown-body > br { 
+  display: none !important; 
+}
 .markdown-body pre { 
   background: var(--claude-bg-sidebar); 
   padding: 12px; 
@@ -631,8 +637,14 @@ html:has(.claude-dashboard) {
   margin-top: 0.4em !important;
 }
 .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { 
-  margin-top: 1.2em; 
-  margin-bottom: 0.6em; 
+  margin-top: 0.5em; 
+  margin-bottom: 0.3em; 
+}
+
+.markdown-body hr {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid var(--claude-border);
 }
 
 

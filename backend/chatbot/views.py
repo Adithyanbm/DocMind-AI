@@ -69,6 +69,17 @@ def chat_completions(request):
         if not messages:
             return JsonResponse({'error': 'Messages payload is required'}, status=400)
 
+        # Enforce tight, unpadded markdown spacing dynamically via LLM context rules
+        formatting_sys_prompt = {
+            "role": "system", 
+            "content": "You are DocMind AI. You format your output in dense Markdown. CRITICAL RULE: DO NOT use excessive blank lines. Never pad headings or horizontal rules (`---`) with multiple empty lines. Keep spacing incredibly compact and do NOT output `\\n\\n\\n`."
+        }
+        
+        if messages[0].get('role') == 'system':
+            messages[0] = formatting_sys_prompt
+        else:
+            messages.insert(0, formatting_sys_prompt)
+
         # Use Django's StreamingHttpResponse to pipe the generator to the client
         return StreamingHttpResponse(
             stream_nvidia_response(messages),

@@ -1,16 +1,76 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, memo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { 
   Bot, User, Menu, Plus, Search, Layers, Compass, 
   MessageSquare, Settings, ArrowUp, Paperclip, ChevronDown, Sparkles, X, HardDrive, Trash2, ChevronRight,
   CircleStop, AudioWaveform, Camera, FolderPlus, Book, Blocks, Globe, PenTool,
-  LogOut, HelpCircle, ArrowUpCircle, Download, Gift, Info
+  LogOut, HelpCircle, ArrowUpCircle, Download, Gift, Info, MicOff, Mic
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import SettingsModal from '../components/SettingsModal';
 import './Dashboard.css';
+
+const markdownComponents = {
+  p: ({node, ...props}) => <p style={{ margin: '0 0 1em 0', lineHeight: '1.6' }} {...props} />,
+  li: ({node, ...props}) => <li style={{ margin: '0.4em 0', lineHeight: '1.6' }} {...props} />,
+  ul: ({node, ...props}) => <ul style={{ margin: '0 0 1em 0', paddingLeft: '1.5em' }} {...props} />,
+  ol: ({node, ...props}) => <ol style={{ margin: '0 0 1em 0', paddingLeft: '1.5em' }} {...props} />,
+  h1: ({node, ...props}) => <h1 style={{ margin: '1.5em 0 0.5em 0', fontSize: '1.75em', fontWeight: '600', letterSpacing: '-0.02em' }} {...props} />,
+  h2: ({node, ...props}) => <h2 style={{ margin: '1.4em 0 0.5em 0', fontSize: '1.5em', fontWeight: '600', letterSpacing: '-0.01em' }} {...props} />,
+  h3: ({node, ...props}) => <h3 style={{ margin: '1.2em 0 0.5em 0', fontSize: '1.25em', fontWeight: '600' }} {...props} />,
+  h4: ({node, ...props}) => <h4 style={{ margin: '1.2em 0 0.5em 0', fontSize: '1.1em', fontWeight: '600' }} {...props} />
+};
+
+const MemoizedMessageRow = memo(({ msg, user }) => {
+  return (
+    <div className={`message-row ${msg.role}`}>
+      {msg.role === 'assistant' && (
+         <div className="message-avatar bot"><Bot size={18} /></div>
+      )}
+      
+      <div className="message-body">
+         {msg.attachmentData && (
+            <img src={msg.attachmentData} alt="Attachment" className="image-preview-standalone" />
+         )}
+         {msg.attachment && !msg.attachmentData && (
+            <div className="message-attachment">
+               <Paperclip size={14} /> {msg.attachment}
+            </div>
+         )}
+         <div className={`message-text ${msg.isError ? 'error-text' : ''}`}>
+            {msg.reasoning_content && (
+              <details className="think-block">
+                <summary>Thought Process</summary>
+                <div className="think-content">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                    {msg.reasoning_content.replace(/\n{3,}/g, '\n\n').replace(/^([*+-]|\d+\.)\s*\n+/gm, '$1 ')}
+                  </ReactMarkdown>
+                </div>
+              </details>
+            )}
+            {msg.content && (
+              <div className="markdown-body">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {msg.content.replace(/\n{3,}/g, '\n\n').replace(/^([*+-]|\d+\.)\s*\n+/gm, '$1 ')}
+                </ReactMarkdown>
+              </div>
+            )}
+         </div>
+      </div>
+
+      {msg.role === 'user' && (
+         <div className="message-avatar user">{user?.email?.charAt(0).toUpperCase() || 'U'}</div>
+      )}
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  // Custom deep comparison to ignore object reference changes if simple token strings match
+  return prevProps.msg.content === nextProps.msg.content 
+         && prevProps.msg.reasoning_content === nextProps.msg.reasoning_content 
+         && prevProps.msg.isError === nextProps.msg.isError;
+});
 
 const Dashboard = () => {
   const { user, isAuthenticated, loading, logout } = useAuth();
@@ -44,6 +104,8 @@ const Dashboard = () => {
     localStorage.setItem('docmind_chatFont', chatFont);
   }, [chatFont]);
 
+
+
   useEffect(() => {
     localStorage.setItem('docmind_bgAnim', backgroundAnimation);
   }, [backgroundAnimation]);
@@ -60,6 +122,8 @@ const Dashboard = () => {
       // Cmd/Ctrl + Shift + O = New Chat
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyO') {
         e.preventDefault();
+        activeStreamIdRef.current = null; // Sever DOM sync to push active rendering to background
+        setIsStreaming(false); // Reset UI visually for the new chat
         setMessages([]);
         setCurrentFileId(null);
         if (textareaRef.current) textareaRef.current.focus();
@@ -85,19 +149,47 @@ const Dashboard = () => {
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
+    
+    // Preload speech synthesis voices on mount so they are ready
+    if (window.speechSynthesis) {
+       window.speechSynthesis.getVoices();
+    }
+    
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
   
   const messagesEndRef = useRef(null);
+  const chatThreadRef = useRef(null);
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const activeStreamIdRef = useRef(null); // Tracks the unique ID of the currently focused UI stream
   
+  const [autoScroll, setAutoScroll] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const [recentChats, setRecentChats] = useState([]);
   const [currentFileId, setCurrentFileId] = useState(null);
   const currentFileIdRef = useRef(null); // Add ref for fileId
+  const backgroundStreamsRef = useRef({}); // Tracks raw token buffers for background generators
+  
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef(null);
+  const manualStopRef = useRef(false);
+  const [autoSubmitPending, setAutoSubmitPending] = useState(false);
+  const handleSubmitRef = useRef(null);
+  const silenceTimeoutRef = useRef(null);
+  
+  // Auto-submit after dictation ends naturally
+  useEffect(() => {
+    if (autoSubmitPending) {
+        setAutoSubmitPending(false);
+        if (input.trim() && !isStreaming) {
+            // Mimic an event object to pass e.preventDefault traps
+            if (handleSubmitRef.current) handleSubmitRef.current({ preventDefault: () => {} });
+        }
+    }
+  }, [autoSubmitPending, input, isStreaming]);
   
   // Sync state to refs
   useEffect(() => {
@@ -185,6 +277,21 @@ const Dashboard = () => {
           }
         }
         
+        // Re-attach to an active background stream if one exists for this file
+        const bgStream = backgroundStreamsRef.current[fileId];
+        if (bgStream) {
+            parsedMessages.push({
+                role: 'assistant',
+                content: bgStream.content,
+                reasoning_content: bgStream.reasoning
+            });
+            activeStreamIdRef.current = bgStream.trackerId;
+            setIsStreaming(true);
+        } else {
+            activeStreamIdRef.current = null; // Decouple DOM from any active background generators
+            setIsStreaming(false);
+        }
+        
         setMessages(parsedMessages);
         setCurrentFileId(fileId);
         if (window.innerWidth <= 768) setSidebarOpen(false);
@@ -194,14 +301,14 @@ const Dashboard = () => {
     }
   };
 
-  const autoSaveToDrive = async (msgsToSave) => {
+  const autoSaveToDrive = async (msgsToSave, overrideFileId = undefined, trackerId = null) => {
     try {
       const accessToken = localStorage.getItem('access');
       const googleToken = localStorage.getItem('google_access_token');
       if (!accessToken || !googleToken) return;
 
       setIsSaving(true);
-      const fileIdToUse = currentFileIdRef.current;
+      const fileIdToUse = overrideFileId !== undefined ? overrideFileId : currentFileIdRef.current;
       
       const res = await fetch('http://localhost:8000/api/chat/save-to-drive/', {
         method: 'POST',
@@ -219,12 +326,18 @@ const Dashboard = () => {
       const data = await res.json();
       if (data.success && data.file_id) {
         if (!fileIdToUse) {
-          setCurrentFileId(data.file_id);
+          // generic save (new chat). Only set currentFileId if we haven't navigated away from this context
+          if (!trackerId || activeStreamIdRef.current === trackerId) {
+             setCurrentFileId(data.file_id);
+          }
           fetchRecentChats(); // Refresh sidebar with new file
         }
+        return data.file_id;
       }
+      return null;
     } catch (err) {
       console.error("Auto-save failed", err);
+      return null;
     } finally {
       setIsSaving(false);
     }
@@ -260,8 +373,20 @@ const Dashboard = () => {
     }
   }, [isAuthenticated, loading, navigate]);
 
+  const handleScroll = () => {
+    if (chatThreadRef.current) {
+        const { scrollTop, scrollHeight, clientHeight } = chatThreadRef.current;
+        const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
+        setAutoScroll(isNearBottom);
+    }
+  };
+
+
+
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    if (autoScroll) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
   };
 
   useEffect(() => {
@@ -352,16 +477,123 @@ const Dashboard = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const toggleListening = () => {
+    if (isListening) {
+      manualStopRef.current = true;
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+      if (recognitionRef.current) recognitionRef.current.stop();
+      setIsListening(false);
+      return;
+    }
+
+    manualStopRef.current = false;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Your browser does not natively support Speech Recognition.");
+      return;
+    }
+    
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    
+    const originalInput = input.trim();
+    let finalTranscript = '';
+    
+    recognition.onresult = (event) => {
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+      const combined = originalInput + (originalInput && (finalTranscript || interimTranscript) ? ' ' : '') + finalTranscript + interimTranscript;
+      setInput(combined);
+      
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+      
+      if (combined.trim()) {
+         silenceTimeoutRef.current = setTimeout(() => {
+             if (recognitionRef.current) {
+                 manualStopRef.current = false;
+                 recognitionRef.current.stop();
+             }
+         }, 2000);
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error", event.error);
+      setIsListening(false);
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+      if (!manualStopRef.current) {
+          setAutoSubmitPending(true);
+      }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  };
+
   const handleStop = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
     setIsStreaming(false);
+  };
+
+  const speakChunk = (text) => {
+    if (!window.speechSynthesis || !text) return;
+    
+    // Remove markdown symbols to make speech sound natural
+    const cleanText = text.replace(/[*#`_]/g, '').trim();
+    if (!cleanText) return;
+    
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'en-US';
+    
+    // Attempt to find a high-quality human voice
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoices = voices.filter(v => 
+       v.name.includes('Google US English') || 
+       v.name.includes('Microsoft Aria') ||
+       v.name.includes('Samantha') || 
+       v.name.includes('Google UK English Female') ||
+       v.name.includes('Microsoft Jenny') ||
+       v.name.includes('Microsoft Guy')
+    );
+    
+    if (preferredVoices.length > 0) {
+        utterance.voice = preferredVoices[0];
+    }
+    
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    
+    window.speechSynthesis.speak(utterance);
   };
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
     if ((!input.trim() && !attachedFile) || isStreaming) return;
+    
+    // Clear any leftover TTS queue whenever a new prompt starts
+    if (window.speechSynthesis) {
+       window.speechSynthesis.cancel();
+    }
+    
+    setAutoScroll(true); // Force scroll to bottom on new message
 
     let apiContent = input;
     if (attachedFile && attachedFile.type.startsWith('image/')) {
@@ -404,6 +636,13 @@ const Dashboard = () => {
         }
         return { role: m.role, content: m.apiContent || m.content };
     });
+    
+    // System constraint for grammatical correctness natively
+    apiMessages.unshift({
+        role: 'system',
+        content: "You are DocMind AI. The user may be utilizing speech-to-text dictation. You must ensure all generated responses are perfectly grammatically correct, highly coherent, and clearly formatted."
+    });
+    
     apiMessages.push(newUserMessage);
 
     try {
@@ -412,6 +651,15 @@ const Dashboard = () => {
       const token = localStorage.getItem('access');
       
       abortControllerRef.current = new AbortController();
+      
+      const streamTrackerId = Date.now().toString();
+      activeStreamIdRef.current = streamTrackerId;
+      let startingFileId = currentFileIdRef.current;
+      
+      // Proactive save for new chats so it appears in sidebar immediately
+      if (!startingFileId) {
+          startingFileId = await autoSaveToDrive([...apiMessages], undefined, streamTrackerId);
+      }
 
       const response = await fetch('http://localhost:8000/api/chat/completions/', {
         method: 'POST',
@@ -430,12 +678,14 @@ const Dashboard = () => {
 
       let assistantContent = '';
       let assistantReasoning = '';
+      let speechBuffer = '';
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
+        let hasUpdates = false;
         
         const lines = chunk.split('\n');
         for (const line of lines) {
@@ -450,34 +700,71 @@ const Dashboard = () => {
                 
                 if (delta.content) {
                   assistantContent += delta.content;
+                  speechBuffer += delta.content;
+                  
+                  // Live TTS Sentence Tokenizer
+                  let match = speechBuffer.match(/([.?!:\n]+)(\s+|$)/);
+                  while (match) {
+                      const splitIndex = match.index + match[1].length;
+                      const sentence = speechBuffer.slice(0, splitIndex);
+                      if (activeStreamIdRef.current === streamTrackerId && !abortControllerRef.current?.signal.aborted) {
+                          speakChunk(sentence);
+                      }
+                      speechBuffer = speechBuffer.slice(splitIndex);
+                      match = speechBuffer.match(/([.?!:\n]+)(\s+|$)/);
+                  }
+                  
+                  hasUpdates = true;
                 }
                 if (delta.reasoning_content) {
                   assistantReasoning += delta.reasoning_content;
+                  hasUpdates = true;
                 }
-                
-                setMessages(prev => {
-                  const newMsgs = [...prev];
-                  const lastMsg = { ...newMsgs[newMsgs.length - 1] };
-                  
-                  if (delta.content) {
-                    lastMsg.content = assistantContent;
-                  }
-                  if (delta.reasoning_content) {
-                    lastMsg.reasoning_content = assistantReasoning;
-                  }
-                  
-                  newMsgs[newMsgs.length - 1] = lastMsg;
-                  return newMsgs;
-                });
               }
             } catch (err) {
               console.warn('Error parsing JSON from stream', err, dataStr);
             }
           }
         }
+
+        // Directly mutating state without artificial timeout.
+        // React 18's async batching and our MemoizedMessageRow will handle rendering safely.
+        if (hasUpdates) {
+          if (startingFileId) {
+              backgroundStreamsRef.current[startingFileId] = {
+                  content: assistantContent,
+                  reasoning: assistantReasoning,
+                  trackerId: streamTrackerId
+              };
+          }
+
+          if (activeStreamIdRef.current === streamTrackerId) {
+            setMessages(prev => {
+              const newMsgs = [...prev];
+              const lastMsg = { ...newMsgs[newMsgs.length - 1] };
+              
+              lastMsg.content = assistantContent;
+              lastMsg.reasoning_content = assistantReasoning;
+              
+              newMsgs[newMsgs.length - 1] = lastMsg;
+              return newMsgs;
+            });
+          }
+        }
       }
       
-      // Stream finished. Construct the exact final state without relying on functional `prev`
+      // Stream finished. Force explicit final sync to catch unrendered stragglers
+      if (activeStreamIdRef.current === streamTrackerId) {
+        setMessages(prev => {
+           const newMsgs = [...prev];
+           const lastMsg = { ...newMsgs[newMsgs.length - 1] };
+           lastMsg.content = assistantContent;
+           lastMsg.reasoning_content = assistantReasoning;
+           newMsgs[newMsgs.length - 1] = lastMsg;
+           return newMsgs;
+        });
+      }
+
       const finalAssistantMessage = {
           role: 'assistant',
           content: assistantContent,
@@ -485,26 +772,44 @@ const Dashboard = () => {
       };
       
       const sessionMessagesToSave = [...apiMessages, finalAssistantMessage];
-      autoSaveToDrive(sessionMessagesToSave);
+      autoSaveToDrive(sessionMessagesToSave, startingFileId, streamTrackerId);
+      
+      // Auto-speak any remainder text that didn't hit a punctuation mark
+      if (activeStreamIdRef.current === streamTrackerId && speechBuffer.trim() && !abortControllerRef.current?.signal.aborted) {
+          speakChunk(speechBuffer);
+      }
 
     } catch (error) {
       if (error.name === 'AbortError') {
-         console.log("Stream aborted by user");
-         autoSaveToDrive(messagesRef.current);
-         return;
+         console.log("Stream manually aborted by stop button");
+         // User hit Stop. Wait, if it was manually aborted, we shouldn't save the aborted state 
+         // without the assistant message. Handle it below:
+         autoSaveToDrive(messagesRef.current, startingFileId, streamTrackerId);
+      } else {
+         console.error('Chat error:', error);
+         setMessages(prev => {
+           // Only inject error if we are still on the original screen
+           if (activeStreamIdRef.current !== streamTrackerId) return prev;
+           const newMsgs = [...prev];
+           const lastMsg = newMsgs[newMsgs.length - 1];
+           lastMsg.content = 'Sorry, there was an error communicating with the AI. Please try again.';
+           lastMsg.isError = true;
+           return newMsgs;
+         });
       }
-      console.error('Chat error:', error);
-      setMessages(prev => {
-        const newMsgs = [...prev];
-        const lastMsg = newMsgs[newMsgs.length - 1];
-        lastMsg.content = 'Sorry, there was an error communicating with the AI. Please try again.';
-        lastMsg.isError = true;
-        return newMsgs;
-      });
     } finally {
-      setIsStreaming(false);
+      if (startingFileId) delete backgroundStreamsRef.current[startingFileId];
+      
+      if (activeStreamIdRef.current === streamTrackerId) {
+        setIsStreaming(false);
+      }
     }
   };
+
+  // Update handle submit ref natively for closure safety to defeat stale closures in auto-submit
+  useEffect(() => {
+    handleSubmitRef.current = handleSubmit;
+  }, [handleSubmit]);
 
   if (loading || !user) return <div className={`claude-dashboard setup-phase ${colorMode === 'light' ? 'theme-light' : ''} font-${chatFont}`}></div>;
 
@@ -522,7 +827,12 @@ const Dashboard = () => {
           </button>
         </div>
 
-        <button className="new-chat-btn" onClick={() => { setMessages([]); setCurrentFileId(null); }} title="New chat (Ctrl+Shift+O)">
+        <button className="new-chat-btn" onClick={() => { 
+            activeStreamIdRef.current = null;
+            setIsStreaming(false);
+            setMessages([]); 
+            setCurrentFileId(null); 
+        }} title="New chat (Ctrl+Shift+O)">
           <div className="new-chat-content">
             <div className="docmind-icon"><Bot size={16} /></div>
             <span>New chat</span>
@@ -638,50 +948,30 @@ const Dashboard = () => {
             <div className="welcome-state">
               <div className="greeting">
                 <Sparkles size={32} className="greeting-sparkle" />
-                <h1>Sunday session, {user?.first_name || 'DocMind'}?</h1>
+                <h1>
+                  {(() => {
+                    const hour = new Date().getHours();
+                    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                    const dayName = days[new Date().getDay()];
+                    let timeGreeting = '';
+                    if (hour >= 5 && hour < 12) timeGreeting = 'Good morning';
+                    else if (hour >= 12 && hour < 17) timeGreeting = 'Good afternoon';
+                    else if (hour >= 17 && hour < 22) timeGreeting = 'Good evening';
+                    else timeGreeting = `Late night ${dayName} session`;
+                    
+                    const nameToDisplay = user?.first_name || (user?.email ? user.email.split('@')[0] : 'DocMind');
+                    return `${timeGreeting}, ${nameToDisplay}`;
+                  })()}
+                </h1>
               </div>
             </div>
           )}
 
           {/* CHAT HISTORY */}
           {messages.length > 0 && (
-             <div className="chat-thread">
+             <div className="chat-thread" ref={chatThreadRef} onScroll={handleScroll}>
                 {messages.map((msg, index) => (
-                   <div key={index} className={`message-row ${msg.role}`}>
-                      {msg.role === 'assistant' && (
-                         <div className="message-avatar bot"><Bot size={18} /></div>
-                      )}
-                      
-                      <div className="message-body">
-                         {msg.attachmentData && (
-                            <img src={msg.attachmentData} alt="Attachment" className="image-preview-standalone" />
-                         )}
-                         {msg.attachment && !msg.attachmentData && (
-                            <div className="message-attachment">
-                               <Paperclip size={14} /> {msg.attachment}
-                            </div>
-                         )}
-                         <div className={`message-text ${msg.isError ? 'error-text' : ''}`}>
-                            {msg.reasoning_content && (
-                              <details className="think-block">
-                                <summary>Thought Process</summary>
-                                <div className="think-content">
-                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.reasoning_content}</ReactMarkdown>
-                                </div>
-                              </details>
-                            )}
-                            {msg.content && (
-                              <div className="markdown-body">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-                              </div>
-                            )}
-                         </div>
-                      </div>
-
-                      {msg.role === 'user' && (
-                         <div className="message-avatar user">{user?.email?.charAt(0).toUpperCase() || 'U'}</div>
-                      )}
-                   </div>
+                   <MemoizedMessageRow key={index} msg={msg} user={user} />
                 ))}
                 
                 {isStreaming && messages[messages.length-1]?.role !== 'assistant' && (
@@ -810,20 +1100,50 @@ const Dashboard = () => {
                   
                   <div className="input-controls-right">
                      <div className="model-selector-small">DocMind AI <ChevronDown size={14}/></div>
-                     {isStreaming ? (
+                     
+                     {isListening && (
+                       <button 
+                         className="mic-btn active"
+                         onClick={toggleListening}
+                         style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 8px', display: 'flex', alignItems: 'center' }}
+                         title="Stop dictating and clear"
+                       >
+                          <div style={{ backgroundColor: '#e57373', borderRadius: '8px', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <MicOff size={18} color="white" strokeWidth={2} />
+                          </div>
+                       </button>
+                     )}
+
+                     {isStreaming || isListening ? (
                         <button 
                           className="submit-btn stop"
-                          onClick={handleStop}
-                          title="Stop generating"
+                          onClick={() => {
+                              if (isListening) {
+                                  // User clicked blue Stop while dictating -> Stop dictating AND send!
+                                  manualStopRef.current = true;
+                                  if (recognitionRef.current) recognitionRef.current.stop();
+                                  setIsListening(false);
+                                  setAutoSubmitPending(true); // force send
+                              } else {
+                                  handleStop();
+                              }
+                          }}
+                          title={isListening ? "Finish dictating and send" : "Stop generating"}
+                          style={{ backgroundColor: '#244b7a', color: '#88bbfb', borderRadius: '8px', padding: '0 12px', height: '32px', display: 'flex', alignItems: 'center', gap: '4px', width: 'auto', border: 'none', outline: 'none', cursor: 'pointer' }}
                         >
-                           <CircleStop size={18} strokeWidth={2} />
+                           <span style={{ fontSize: '18px', letterSpacing: '1px', lineHeight: '1', paddingBottom: '4px' }}>•••</span> <span style={{ fontSize: '14px', fontWeight: '500' }}>Stop</span>
                         </button>
                      ) : (
                         <button 
                           className={`submit-btn ${input.trim() || attachedFile ? 'active' : 'idle'}`}
-                          onClick={handleSubmit}
-                          disabled={(!input.trim() && !attachedFile)}
-                          title="Send message"
+                          onClick={(e) => {
+                             if (input.trim() || attachedFile) {
+                                handleSubmit(e);
+                             } else {
+                                toggleListening();
+                             }
+                          }}
+                          title={input.trim() || attachedFile ? "Send message" : "Voice dictate"}
                         >
                            {input.trim() || attachedFile ? (
                               <ArrowUp size={20} strokeWidth={2.5} />
