@@ -5,22 +5,72 @@ import {
   Bot, User, Menu, Plus, Search, Layers, Compass, 
   MessageSquare, Settings, ArrowUp, Paperclip, ChevronDown, Sparkles, X, HardDrive, Trash2, ChevronRight,
   CircleStop, AudioWaveform, Camera, FolderPlus, Book, Blocks, Globe, PenTool,
-  LogOut, HelpCircle, ArrowUpCircle, Download, Gift, Info, MicOff, Mic
+  LogOut, HelpCircle, ArrowUpCircle, Download, Gift, Info, MicOff, Mic, Copy, Check
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import SettingsModal from '../components/SettingsModal';
 import './Dashboard.css';
 
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+/* ── CodeBlock — scroll tracking handled by Dashboard's handleScroll ── */
+const CodeBlock = ({ inline, className, children, ...props }) => {
+  const match = /language-(\w+)/.exec(className || '');
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(String(children).replace(/^\n+/, '').replace(/\n$/, ''));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (inline) {
+    return <code className={className} {...props}>{children}</code>;
+  }
+
+  const lang = match ? match[1] : 'text';
+
+  return (
+    <div className="code-block-wrapper">
+      <div className="code-block-lang">
+        <span className="code-language">{lang}</span>
+      </div>
+      <button className="code-copy-btn" onClick={handleCopy} aria-label="Copy code">
+        {copied ? <Check size={14} /> : <Copy size={14} />}
+        <span>{copied ? 'Copied!' : 'Copy'}</span>
+      </button>
+      <SyntaxHighlighter
+        children={String(children).replace(/^\n+/, '').replace(/\n$/, '')}
+        style={oneDark}
+        language={lang}
+        PreTag="div"
+        customStyle={{
+          margin: 0,
+          background: 'transparent',
+          padding: '4px 16px 16px 16px', /* Tiny 4px top padding */
+          fontSize: '0.9em',
+          lineHeight: '1.5',
+          fontFamily: "'Fira Code', 'Consolas', monospace",
+        }}
+        {...props}
+      />
+    </div>
+  );
+};
+
 const markdownComponents = {
-  p: ({node, ...props}) => <p style={{ margin: '0 0 1em 0', lineHeight: '1.6' }} {...props} />,
+  p: ({node, ...props}) => <div className="md-paragraph" style={{ margin: '0 0 1em 0', lineHeight: '1.6' }} {...props} />,
   li: ({node, ...props}) => <li style={{ margin: '0.4em 0', lineHeight: '1.6' }} {...props} />,
   ul: ({node, ...props}) => <ul style={{ margin: '0 0 1em 0', paddingLeft: '1.5em' }} {...props} />,
   ol: ({node, ...props}) => <ol style={{ margin: '0 0 1em 0', paddingLeft: '1.5em' }} {...props} />,
   h1: ({node, ...props}) => <h1 style={{ margin: '1.5em 0 0.5em 0', fontSize: '1.75em', fontWeight: '600', letterSpacing: '-0.02em' }} {...props} />,
   h2: ({node, ...props}) => <h2 style={{ margin: '1.4em 0 0.5em 0', fontSize: '1.5em', fontWeight: '600', letterSpacing: '-0.01em' }} {...props} />,
   h3: ({node, ...props}) => <h3 style={{ margin: '1.2em 0 0.5em 0', fontSize: '1.25em', fontWeight: '600' }} {...props} />,
-  h4: ({node, ...props}) => <h4 style={{ margin: '1.2em 0 0.5em 0', fontSize: '1.1em', fontWeight: '600' }} {...props} />
+  h4: ({node, ...props}) => <h4 style={{ margin: '1.2em 0 0.5em 0', fontSize: '1.1em', fontWeight: '600' }} {...props} />,
+  pre: ({node, ...props}) => <div className="markdown-pre" style={{ margin: 0, padding: 0 }} {...props} />,
+  code: (props) => <CodeBlock {...props} />,
 };
 
 const MemoizedMessageRow = memo(({ msg, user }) => {
@@ -45,7 +95,11 @@ const MemoizedMessageRow = memo(({ msg, user }) => {
                 <summary>Thought Process</summary>
                 <div className="think-content">
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                    {msg.reasoning_content.replace(/\n{3,}/g, '\n\n').replace(/^([*+-]|\d+\.)\s*\n+/gm, '$1 ')}
+                    {msg.reasoning_content
+                      .replace(/^```(?:markdown|md)\s*\n([\s\S]*?)\n```\s*$/i, '$1')
+                      .replace(/\n{3,}/g, '\n\n')
+                      .replace(/^([*+-]|\d+\.)\s*\n+/gm, '$1 ')
+                    }
                   </ReactMarkdown>
                 </div>
               </details>
@@ -53,7 +107,11 @@ const MemoizedMessageRow = memo(({ msg, user }) => {
             {msg.content && (
               <div className="markdown-body">
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                  {msg.content.replace(/\n{3,}/g, '\n\n').replace(/^([*+-]|\d+\.)\s*\n+/gm, '$1 ')}
+                  {msg.content
+                    .replace(/^```(?:markdown|md)\s*\n([\s\S]*?)\n```\s*$/i, '$1')
+                    .replace(/\n{3,}/g, '\n\n')
+                    .replace(/^([*+-]|\d+\.)\s*\n+/gm, '$1 ')
+                  }
                 </ReactMarkdown>
               </div>
             )}
@@ -375,9 +433,37 @@ const Dashboard = () => {
 
   const handleScroll = () => {
     if (chatThreadRef.current) {
-        const { scrollTop, scrollHeight, clientHeight } = chatThreadRef.current;
+        const chatThread = chatThreadRef.current;
+        const { scrollTop, scrollHeight, clientHeight } = chatThread;
         const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
         setAutoScroll(isNearBottom);
+
+        // ── Copy button scroll tracking ──
+        // Update position of ALL copy buttons inside code blocks
+        const threadRect = chatThread.getBoundingClientRect();
+        
+        const btns = chatThread.querySelectorAll('.code-copy-btn');
+        btns.forEach(btn => {
+          const wrapper = btn.closest('.code-block-wrapper');
+          if (!wrapper) return;
+          
+          const wRect = wrapper.getBoundingClientRect();
+          const btnH = btn.offsetHeight || 32;
+          
+          // Calculate relative position: how far is the top of the code block 
+          // above or below the inside top of the chat area?
+          const relativeTop = wRect.top - threadRect.top;
+          
+          // If the code block's top has scrolled above the chat thread's visible top area (plus a small margin)
+          // AND the bottom of the code block hasn't scrolled past the chat thread's top yet
+          if (relativeTop < 0 && wRect.bottom > threadRect.top + btnH + 16) {
+            // Slide it down to compensate for the scroll amount
+            btn.style.top = Math.round(Math.abs(relativeTop) + 8) + 'px';
+          } else {
+            // Code block is fully visible or entirely off-screen
+            btn.style.top = '8px';
+          }
+        });
     }
   };
 
