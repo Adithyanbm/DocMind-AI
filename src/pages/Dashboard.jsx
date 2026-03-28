@@ -1,24 +1,74 @@
-import React, { useState, useRef, useEffect, memo } from 'react';
+import React, { useState, useRef, useEffect, memo, createContext, useContext } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { 
   Bot, User, Menu, Plus, Search, Layers, Compass, 
   MessageSquare, Settings, ArrowUp, Paperclip, ChevronDown, Sparkles, X, HardDrive, Trash2, ChevronRight,
   CircleStop, AudioWaveform, Camera, FolderPlus, Book, Blocks, Globe, PenTool,
-  LogOut, HelpCircle, ArrowUpCircle, Download, Gift, Info, MicOff, Mic, Copy, Check, Square
+  LogOut, HelpCircle, ArrowUpCircle, Download, Gift, Info, MicOff, Mic, Copy, Check, Square, FileCode, FileText, Loader2, RotateCcw
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import SettingsModal from '../components/SettingsModal';
 import './Dashboard.css';
 
+const ArtifactContext = createContext();
+
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+const customOneDark = { ...oneDark };
+Object.keys(customOneDark).forEach(key => {
+  if (typeof customOneDark[key] === 'object') {
+    if (customOneDark[key].background) {
+      delete customOneDark[key].background;
+    }
+    if (customOneDark[key].backgroundColor) {
+      delete customOneDark[key].backgroundColor;
+    }
+  }
+});
+/* ── Infer a meaningful filename from code content ── */
+const inferCodeName = (rawCode, lang) => {
+  // Highest priority: LLM-provided filename comment in any language
+  const filenameComment = rawCode.match(/^#\s*filename:\s*(\S+)/im)
+    || rawCode.match(/^\/\/\s*filename:\s*(\S+)/im)
+    || rawCode.match(/^<!--\s*filename:\s*(\S+)/im)
+    || rawCode.match(/^\/\*\s*filename:\s*(\S+)/im);
+  if (filenameComment) return filenameComment[1];
+
+  const extMap = { python: 'py', javascript: 'js', typescript: 'ts', jsx: 'jsx', tsx: 'tsx', bash: 'sh', shell: 'sh', html: 'html', css: 'css', java: 'java', cpp: 'cpp', c: 'c', go: 'go', rust: 'rs', ruby: 'rb' };
+  const ext = extMap[lang?.toLowerCase()] || lang || 'txt';
+
+  // Python class
+  const pyClass = rawCode.match(/^class\s+(\w+)/m);
+  if (pyClass) return `${pyClass[1].toLowerCase()}.${ext}`;
+  // Python def (skip __init__, __main__, setup, etc.)
+  const pyDef = rawCode.match(/^def\s+(?!__)(\w+)/m);
+  if (pyDef && lang === 'python') return `${pyDef[1]}.${ext}`;
+  // JS/TS named export class
+  const jsClass = rawCode.match(/^(?:export\s+)?(?:default\s+)?class\s+(\w+)/m);
+  if (jsClass) return `${jsClass[1]}.${ext}`;
+  // React functional component (PascalCase const)
+  const jsComp = rawCode.match(/^(?:export\s+(?:default\s+)?)?(?:function|const)\s+([A-Z]\w+)/m);
+  if (jsComp) return `${jsComp[1]}.${ext}`;
+  // General function
+  const jsFn = rawCode.match(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)/m);
+  if (jsFn) return `${jsFn[1]}.${ext}`;
+  // HTML title
+  const htmlTitle = rawCode.match(/<title>([^<]{1,30})<\/title>/i);
+  if (htmlTitle) return `${htmlTitle[1].trim().replace(/\s+/g, '_').toLowerCase()}.html`;
+  // Shebang
+  if (rawCode.startsWith('#!/')) return `script.${ext}`;
+
+  return `snippet.${ext}`;
+};
 
 /* ── CodeBlock — scroll tracking handled by Dashboard's handleScroll ── */
 const CodeBlock = ({ inline, className, children, ...props }) => {
   const match = /language-(\w+)/.exec(className || '');
   const [copied, setCopied] = useState(false);
+  const context = useContext(ArtifactContext);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(String(children).replace(/^\n+/, '').replace(/\n$/, ''));
@@ -31,6 +81,62 @@ const CodeBlock = ({ inline, className, children, ...props }) => {
   }
 
   const lang = match ? match[1] : 'text';
+  const rawCode = String(children).replace(/^\n+/, '').replace(/\n$/, '');
+  const lineCount = rawCode.split('\n').length;
+
+  // Always show stepper for large blocks — even during streaming
+  // This avoids the jarring inline → stepper transition after stream ends
+  if (lineCount > 15 && context?.openArtifact) {
+      const fileName = inferCodeName(rawCode, lang);
+      const artIdx = context.nextArtIdxRef?.current ?? 0;
+      if (context.nextArtIdxRef) context.nextArtIdxRef.current += 1;
+      
+      // Stepper is its own component so it can have local collapsed state
+      const ArtifactStepper = () => {
+        const [collapsed, setCollapsed] = React.useState(false);
+        return (
+          <div className="artifact-inline-stepper">
+            <div 
+              className="stepper-header" 
+              onClick={(e) => { e.stopPropagation(); setCollapsed(c => !c); }}
+              style={{ cursor: 'pointer', userSelect: 'none' }}
+            >
+              Created {fileName}
+              <ChevronDown size={14} style={{ transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }} />
+            </div>
+            {!collapsed && (
+              <div className="stepper-timeline">
+                <div className="stepper-track-line"></div>
+                <div className="stepper-item" style={{ cursor: 'pointer' }} onClick={() => context.openArtifact(artIdx, lang, rawCode)}>
+                   <div className="stepper-icon"><FileCode size={14} /></div>
+                   <div className="stepper-content">
+                      <span className="stepper-text">Generated code</span>
+                      <span className="stepper-badge">{fileName}</span>
+                   </div>
+                </div>
+                <div className="stepper-item" style={{ cursor: 'pointer' }} onClick={() => context.openArtifact(artIdx, lang, rawCode)}>
+                   <div className="stepper-icon"><FileText size={14} /></div>
+                   <div className="stepper-content">
+                      <span className="stepper-text">View in Artifact panel</span>
+                   </div>
+                </div>
+                <div className={`stepper-item ${context?.isStreaming ? '' : 'done'}`}>
+                   <div className="stepper-icon">
+                     {context?.isStreaming ? <Loader2 size={14} className="animate-spin" style={{ animation: 'spin 2s linear infinite' }} /> : <Check size={14} />}
+                   </div>
+                   <div className="stepper-content">
+                      <span className="stepper-text">
+                        {context?.isStreaming ? 'Generating artifact...' : 'Artifact ready'}
+                      </span>
+                   </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      };
+      return <ArtifactStepper />;
+  }
 
   return (
     <div className="code-block-wrapper">
@@ -43,7 +149,7 @@ const CodeBlock = ({ inline, className, children, ...props }) => {
       </button>
       <SyntaxHighlighter
         children={String(children).replace(/^\n+/, '').replace(/\n$/, '')}
-        style={oneDark}
+        style={customOneDark}
         language={lang}
         PreTag="div"
         customStyle={{
@@ -85,7 +191,39 @@ const cleanMarkdown = (text) => {
     .replace(/^([*+-]|\d+\.)\s*\n+/gm, '$1 ');
 };
 
-const MemoizedMessageRow = memo(({ msg, user }) => {
+const extractArtifacts = (text) => {
+  if (!text) return [];
+  const artifacts = [];
+  // Match both complete blocks and currently streaming unclosed blocks
+  const regex = /```([\w-]+)?\n([\s\S]*?)(?:```|$)/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const rawCode = match[2].replace(/^\n+/, '').replace(/\n$/, '');
+    const hasFilenameTag = /^(?:#|\/\/|<!--|\/\*)\s*filename:\s*\S+/im.test(rawCode);
+    if (hasFilenameTag) {
+      const lang = match[1] || 'text';
+      artifacts.push({ lang, code: rawCode, fileName: inferCodeName(rawCode, lang) });
+    }
+  }
+  return artifacts;
+};
+
+const MemoizedMessageRow = memo(({ msg, user, msgIdx }) => {
+  const context = useContext(ArtifactContext);
+  const artifacts = React.useMemo(() => extractArtifacts(msg.content), [msg.content]);
+  // Provide per-message artifact index counter for CodeBlock via context
+  const nextArtIdxRef = useRef(0);
+  // Reset on each render so index is deterministic per message
+  nextArtIdxRef.current = 0;
+  
+  const openArtifact = React.useCallback((artIdx, lang, codeSnapshot) => {
+    context?.setActiveArtifact({ msgIdx, artIdx, lang, codeSnapshot: codeSnapshot || '' });
+  }, [msgIdx, context]);
+
+  // Pass isStreaming into context so CodeBlock can suppress stepper while streaming
+  const isStreaming = context?.isStreaming;
+  const isThisStreamingMsg = isStreaming && msgIdx === (context?.messages?.length ?? 0) - 1;
+
   return (
     <div className={`message-row ${msg.role}`}>
       {msg.role === 'assistant' && (
@@ -114,10 +252,48 @@ const MemoizedMessageRow = memo(({ msg, user }) => {
             )}
             {msg.content && (
               <div className="markdown-body">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                  {cleanMarkdown(msg.content)}
-                </ReactMarkdown>
+                <ArtifactContext.Provider value={{ ...context, openArtifact, nextArtIdxRef, isStreaming: isThisStreamingMsg }}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                    {cleanMarkdown(msg.content)}
+                  </ReactMarkdown>
+                </ArtifactContext.Provider>
               </div>
+            )}
+            
+            {/* END OF CONVERSATION ARTIFACTS BLOCK — only shown after streaming completes */}
+            {msg.role === 'assistant' && artifacts.length > 0 && !isThisStreamingMsg && (
+               <div className="message-artifacts-bottom">
+                  {artifacts.map((art, idx) => {
+                     return (
+                        <div key={idx} className="artifact-file-card" onClick={() => openArtifact(idx, art.lang, art.code)}>
+                           <div className="artifact-file-left">
+                              <div className="artifact-file-icon">
+                                 <FileCode size={18} strokeWidth={1.5} />
+                              </div>
+                              <div className="artifact-file-info">
+                                <div className="artifact-file-title" title={art.fileName}>{art.fileName}</div>
+                                <div className="artifact-file-lang">{art.lang.toUpperCase()} code</div>
+                              </div>
+                           </div>
+                           <button 
+                             className="artifact-file-download" 
+                             onClick={(e) => { 
+                               e.stopPropagation(); 
+                               const blob = new Blob([art.code], { type: 'text/plain' });
+                               const url = URL.createObjectURL(blob);
+                               const a = document.createElement('a');
+                               a.href = url;
+                               a.download = art.fileName;
+                               a.click();
+                               URL.revokeObjectURL(url);
+                             }}
+                           >
+                             Download
+                           </button>
+                        </div>
+                     );
+                  })}
+               </div>
             )}
          </div>
       </div>
@@ -137,6 +313,35 @@ const MemoizedMessageRow = memo(({ msg, user }) => {
 const Dashboard = () => {
   const { user, isAuthenticated, loading, logout } = useAuth();
   const navigate = useNavigate();
+  
+  const [activeArtifact, setActiveArtifact] = useState(null); // Artifact system
+  const [artifactDropdownOpen, setArtifactDropdownOpen] = useState(false);
+  const [artifactWidth, setArtifactWidth] = useState(500);
+  const isResizingRef = useRef(false);
+  
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizingRef.current) return;
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth > 350 && newWidth < window.innerWidth - 450) {
+        setArtifactWidth(newWidth);
+      }
+    };
+    
+    const handleMouseUp = () => {
+      if (isResizingRef.current) {
+        isResizingRef.current = false;
+        document.body.style.cursor = 'default';
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
   
   const [messages, setMessages] = useState([]);
   const messagesRef = useRef([]); // Add ref for messages
@@ -908,6 +1113,7 @@ const Dashboard = () => {
   if (loading || !user) return <div className={`claude-dashboard setup-phase ${colorMode === 'light' ? 'theme-light' : ''} font-${chatFont}`}></div>;
 
   return (
+    <ArtifactContext.Provider value={{ activeArtifact, setActiveArtifact, messages, isStreaming }}>
     <div className={`claude-dashboard ${colorMode === 'light' ? 'theme-light' : ''} font-${chatFont}`}>
       
       {/* SIDEBAR */}
@@ -1035,6 +1241,7 @@ const Dashboard = () => {
           </div>
         </header>
 
+        <div className="workspace-body">
         <div className={`workspace-content ${messages.length === 0 ? 'empty' : ''}`}>
           
           {/* EMPTY STATE */}
@@ -1065,7 +1272,7 @@ const Dashboard = () => {
           {messages.length > 0 && (
              <div className="chat-thread" ref={chatThreadRef} onScroll={handleScroll}>
                 {messages.map((msg, index) => (
-                   <MemoizedMessageRow key={index} msg={msg} user={user} />
+                   <MemoizedMessageRow key={index} msg={msg} user={user} msgIdx={index} />
                 ))}
                 
                 {isStreaming && messages[messages.length-1]?.role !== 'assistant' && (
@@ -1282,8 +1489,122 @@ const Dashboard = () => {
           </div>
 
         </div>
+
+        {/* RIGHT PANEL ARTIFACT */}
+        {activeArtifact && (() => {
+           // Derive live code from messages — updates automatically when messages change during streaming
+           const liveMsg = messages[activeArtifact.msgIdx];
+           const liveArtifacts = liveMsg ? extractArtifacts(liveMsg.content) : [];
+           // Fingerprint match: find artifact whose code starts with the stored snapshot prefix
+           const fingerprint = (activeArtifact.codeSnapshot || '').slice(0, 80);
+           const liveArt = fingerprint
+             ? (liveArtifacts.find(a => a.code.startsWith(fingerprint)) ?? liveArtifacts[activeArtifact.artIdx])
+             : liveArtifacts[activeArtifact.artIdx];
+           // Always fall back to the snapshot stored at click time so no "Generating code..."
+           const rawLiveCode = (liveArt?.code && liveArt.code.length >= (activeArtifact.codeSnapshot || '').length)
+             ? liveArt.code
+             : (activeArtifact.codeSnapshot || liveArt?.code || '');
+           const liveCode = rawLiveCode.replace(/^(?:#|\/\/|<!--|\/\*)\s*filename:\s*\S+.*\n?/i, '');
+           const liveLang = liveArt?.lang ?? activeArtifact.lang ?? 'text';
+           
+           return (
+           <>
+              <div 
+                className="artifact-resizer" 
+                onMouseDown={(e) => {
+                   e.preventDefault();
+                   isResizingRef.current = true;
+                   document.body.style.cursor = 'col-resize';
+                }}
+              />
+              <div className="artifact-side-panel" style={{ width: `${artifactWidth}px`, maxWidth: 'none' }}>
+                 <div className="artifact-panel-header" style={{ justifyContent: 'space-between' }}>
+                    <div className="artifact-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                       <div className="artifact-header-title" style={{ marginRight: '4px' }}>
+                         {liveArt?.fileName || `artifact.${liveLang}`}
+                       </div>
+                       {isStreaming && activeArtifact.msgIdx === messages.length - 1 && (
+                           <div className="artifact-header-live">
+                              <div className="artifact-header-live-dot"></div>
+                              Live
+                           </div>
+                       )}
+                    </div>
+                    <div className="artifact-header-actions" style={{ gap: '6px', display: 'flex', alignItems: 'center' }}>
+                        <div className="artifact-dropdown">
+                           <button 
+                             className="artifact-dropdown-btn left" 
+                             onClick={() => navigator.clipboard.writeText(liveCode)} 
+                             title="Copy"
+                           >
+                             Copy
+                           </button>
+                           <button 
+                             className="artifact-dropdown-btn right"
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               setArtifactDropdownOpen(!artifactDropdownOpen);
+                             }}
+                             title="More Options"
+                           >
+                             <ChevronDown size={14} style={{ transform: artifactDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                           </button>
+                           {artifactDropdownOpen && (
+                             <div className="artifact-dropdown-content" style={{ display: 'flex' }}>
+                               <button className="artifact-dropdown-item" onClick={() => {
+                                  const blob = new Blob([liveCode], { type: 'text/plain' });
+                                  const url = URL.createObjectURL(blob);
+                                  const a = document.createElement('a');
+                                  a.href = url;
+                                  a.download = liveArt?.fileName || `artifact.${liveLang}`;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  document.body.removeChild(a);
+                                  URL.revokeObjectURL(url);
+                                  setArtifactDropdownOpen(false);
+                               }}>
+                                  Download
+                               </button>
+                               <button className="artifact-dropdown-item" onClick={() => setArtifactDropdownOpen(false)}>Publish artifact</button>
+                             </div>
+                           )}
+                        </div>
+                        <button className="artifact-action-btn" title="Refresh">
+                          <RotateCcw size={15} />
+                        </button>
+                        <button className="artifact-action-btn close" onClick={() => setActiveArtifact(null)} title="Close">
+                          <X size={16} />
+                        </button>
+                     </div>
+                 </div>
+                 <div className="artifact-panel-body">
+                    {liveCode ? (
+                      <SyntaxHighlighter
+                         children={liveCode}
+                         language={liveLang}
+                         style={customOneDark}
+                         PreTag="div"
+                         showLineNumbers={true}
+                         customStyle={{
+                           margin: 0,
+                           background: 'transparent',
+                           padding: '16px',
+                           fontSize: '0.86em',
+                           lineHeight: '1.5',
+                           fontFamily: "'Fira Code', 'Consolas', monospace",
+                         }}
+                      />
+                    ) : (
+                      <div style={{ padding: '16px', color: '#888', fontSize: '0.9rem' }}>Generating code...</div>
+                    )}
+                 </div>
+              </div>
+           </>
+           );
+        })()}
+        </div>
+
       </div>
-      
       {/* SEARCH MODAL OVERLAY */}
       {isSearchModalOpen && (
         <div className="search-modal-overlay" onClick={() => setIsSearchModalOpen(false)}>
@@ -1353,6 +1674,7 @@ const Dashboard = () => {
       />
 
     </div>
+    </ArtifactContext.Provider>
   );
 };
 

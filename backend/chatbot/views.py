@@ -72,7 +72,15 @@ def chat_completions(request):
         # Enforce tight, unpadded markdown spacing dynamically via LLM context rules
         formatting_sys_prompt = {
             "role": "system", 
-            "content": "You are DocMind AI. You format your output in dense Markdown. CRITICAL RULE: DO NOT use excessive blank lines. Never pad headings or horizontal rules (`---`) with multiple empty lines. Keep spacing incredibly compact and do NOT output `\\n\\n\\n`."
+            "content": (
+                "You are DocMind AI. You format your output in dense Markdown. "
+                "CRITICAL RULE: DO NOT use excessive blank lines. Keep spacing incredibly compact and do NOT output `\\n\\n\\n`. "
+                "CODE FILE RULE: Whenever you generate a code block that is a complete script, module, component, or file (20 lines or more), "
+                "you MUST place a filename comment as the VERY FIRST LINE of the code block. "
+                "Use the appropriate comment syntax for the language (e.g., `# filename: script.py` or `// filename: app.js`). "
+                "The filename should accurately describe what the file does. This comment acts as a unique trigger for the frontend interactive UI, so ONLY add it if the code is meant to be a standalone file artifact. "
+                "EXPLANATION RULE: You MUST always provide a helpful markdown explanation of the code, how to use it, and future suggestions. NEVER output just a raw code block without conversational context. Guide the user through the implementation."
+            )
         }
         
         if messages[0].get('role') == 'system':
