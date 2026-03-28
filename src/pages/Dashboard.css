@@ -1057,12 +1057,15 @@ html:has(.claude-dashboard) {
 }
 
 /* Inline code blocks */
-.markdown-body code { 
+.markdown-body code,
+.markdown-inline-code { 
   font-family: 'Fira Code', 'Consolas', monospace; 
   background: rgba(255, 255, 255, 0.08); 
-  padding: 3px 6px; 
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 2px 5px; 
   border-radius: 4px; 
-  font-size: 0.9em; 
+  font-size: 0.85em; 
+  line-height: normal;
   color: #e88691; /* Highlight inline code gently */
 }
 

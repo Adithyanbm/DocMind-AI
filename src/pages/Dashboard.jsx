@@ -28,6 +28,41 @@ Object.keys(customOneDark).forEach(key => {
     }
   }
 });
+
+/* ── Performance: Debounced Viewer for streaming artifacts ── */
+const DebouncedSyntaxHighlighter = React.memo(({ code, lang }) => {
+  const [displayCode, setDisplayCode] = React.useState(code);
+
+  React.useEffect(() => {
+    // Only debounce during rapid small stream chunks.
+    if (!displayCode || Math.abs(code.length - displayCode.length) > 50) {
+      setDisplayCode(code);
+    } else {
+      const timer = setTimeout(() => {
+        setDisplayCode(code);
+      }, 400); // Throttles highlighting calculation to every 400ms
+      return () => clearTimeout(timer);
+    }
+  }, [code, displayCode]);
+
+  return (
+    <SyntaxHighlighter
+       children={displayCode}
+       language={lang}
+       style={customOneDark}
+       PreTag="div"
+       showLineNumbers={true}
+       customStyle={{
+         margin: 0,
+         background: 'transparent',
+         padding: '16px',
+         fontSize: '0.86em',
+         lineHeight: '1.5',
+         fontFamily: "'Fira Code', 'Consolas', monospace",
+       }}
+    />
+  );
+});
 /* ── Infer a meaningful filename from code content ── */
 const inferCodeName = (rawCode, lang) => {
   // Highest priority: LLM-provided filename comment in any language
@@ -83,10 +118,16 @@ const CodeBlock = ({ inline, className, children, ...props }) => {
   const lang = match ? match[1] : 'text';
   const rawCode = String(children).replace(/^\n+/, '').replace(/\n$/, '');
   const lineCount = rawCode.split('\n').length;
+  const hasFilenameTag = /^(?:#|\/\/|<!--|\/\*)\s*filename:\s*\S+/im.test(rawCode);
 
-  // Always show stepper for large blocks — even during streaming
-  // This avoids the jarring inline → stepper transition after stream ends
-  if (lineCount > 15 && context?.openArtifact) {
+  // If the LLM generates a very short code block (1-2 lines) with no filename tag,
+  // convert it directly into the inline red-marked code boundary style to avoid bulky UI wrappers.
+  if (!hasFilenameTag && lineCount <= 2 && rawCode.length < 120) {
+    return <code className={`markdown-inline-code ${className || ''}`} {...props}>{children}</code>;
+  }
+
+  // Always show stepper for blocks tagged as artifacts
+  if (hasFilenameTag && context?.openArtifact) {
       const fileName = inferCodeName(rawCode, lang);
       const artIdx = context.nextArtIdxRef?.current ?? 0;
       if (context.nextArtIdxRef) context.nextArtIdxRef.current += 1;
@@ -1579,20 +1620,9 @@ const Dashboard = () => {
                  </div>
                  <div className="artifact-panel-body">
                     {liveCode ? (
-                      <SyntaxHighlighter
-                         children={liveCode}
-                         language={liveLang}
-                         style={customOneDark}
-                         PreTag="div"
-                         showLineNumbers={true}
-                         customStyle={{
-                           margin: 0,
-                           background: 'transparent',
-                           padding: '16px',
-                           fontSize: '0.86em',
-                           lineHeight: '1.5',
-                           fontFamily: "'Fira Code', 'Consolas', monospace",
-                         }}
+                      <DebouncedSyntaxHighlighter
+                         code={liveCode}
+                         lang={liveLang}
                       />
                     ) : (
                       <div style={{ padding: '16px', color: '#888', fontSize: '0.9rem' }}>Generating code...</div>
