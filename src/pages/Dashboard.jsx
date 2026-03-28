@@ -5,7 +5,7 @@ import {
   Bot, User, Menu, Plus, Search, Layers, Compass, 
   MessageSquare, Settings, ArrowUp, Paperclip, ChevronDown, Sparkles, X, HardDrive, Trash2, ChevronRight,
   CircleStop, AudioWaveform, Camera, FolderPlus, Book, Blocks, Globe, PenTool,
-  LogOut, HelpCircle, ArrowUpCircle, Download, Gift, Info, MicOff, Mic, Copy, Check
+  LogOut, HelpCircle, ArrowUpCircle, Download, Gift, Info, MicOff, Mic, Copy, Check, Square
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -73,6 +73,18 @@ const markdownComponents = {
   code: (props) => <CodeBlock {...props} />,
 };
 
+const cleanMarkdown = (text) => {
+  if (!text) return '';
+  const match = text.match(/^\s*```(?:markdown|md)\s*?\n([\s\S]*)$/i);
+  let cleaned = text;
+  if (match) {
+    cleaned = match[1].replace(/\n?```\s*$/, '');
+  }
+  return cleaned
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/^([*+-]|\d+\.)\s*\n+/gm, '$1 ');
+};
+
 const MemoizedMessageRow = memo(({ msg, user }) => {
   return (
     <div className={`message-row ${msg.role}`}>
@@ -95,11 +107,7 @@ const MemoizedMessageRow = memo(({ msg, user }) => {
                 <summary>Thought Process</summary>
                 <div className="think-content">
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                    {msg.reasoning_content
-                      .replace(/^```(?:markdown|md)\s*\n([\s\S]*?)\n```\s*$/i, '$1')
-                      .replace(/\n{3,}/g, '\n\n')
-                      .replace(/^([*+-]|\d+\.)\s*\n+/gm, '$1 ')
-                    }
+                    {cleanMarkdown(msg.reasoning_content)}
                   </ReactMarkdown>
                 </div>
               </details>
@@ -107,11 +115,7 @@ const MemoizedMessageRow = memo(({ msg, user }) => {
             {msg.content && (
               <div className="markdown-body">
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                  {msg.content
-                    .replace(/^```(?:markdown|md)\s*\n([\s\S]*?)\n```\s*$/i, '$1')
-                    .replace(/\n{3,}/g, '\n\n')
-                    .replace(/^([*+-]|\d+\.)\s*\n+/gm, '$1 ')
-                  }
+                  {cleanMarkdown(msg.content)}
                 </ReactMarkdown>
               </div>
             )}
@@ -237,6 +241,7 @@ const Dashboard = () => {
   const [autoSubmitPending, setAutoSubmitPending] = useState(false);
   const handleSubmitRef = useRef(null);
   const silenceTimeoutRef = useRef(null);
+  const lastInputWasVoiceRef = useRef(false);
   
   // Auto-submit after dictation ends naturally
   useEffect(() => {
@@ -244,7 +249,7 @@ const Dashboard = () => {
         setAutoSubmitPending(false);
         if (input.trim() && !isStreaming) {
             // Mimic an event object to pass e.preventDefault traps
-            if (handleSubmitRef.current) handleSubmitRef.current({ preventDefault: () => {} });
+            if (handleSubmitRef.current) handleSubmitRef.current({ preventDefault: () => {} }, { fromVoice: true });
         }
     }
   }, [autoSubmitPending, input, isStreaming]);
@@ -670,10 +675,12 @@ const Dashboard = () => {
     window.speechSynthesis.speak(utterance);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e, options = { fromVoice: false }) => {
     if (e) e.preventDefault();
     if ((!input.trim() && !attachedFile) || isStreaming) return;
     
+    lastInputWasVoiceRef.current = options.fromVoice;
+
     // Clear any leftover TTS queue whenever a new prompt starts
     if (window.speechSynthesis) {
        window.speechSynthesis.cancel();
@@ -731,6 +738,9 @@ const Dashboard = () => {
     
     apiMessages.push(newUserMessage);
 
+    const streamTrackerId = Date.now().toString();
+    let startingFileId = currentFileIdRef.current;
+
     try {
       setMessages(prev => [...prev, { role: 'assistant', content: '', reasoning_content: '' }]);
 
@@ -738,9 +748,7 @@ const Dashboard = () => {
       
       abortControllerRef.current = new AbortController();
       
-      const streamTrackerId = Date.now().toString();
       activeStreamIdRef.current = streamTrackerId;
-      let startingFileId = currentFileIdRef.current;
       
       // Proactive save for new chats so it appears in sidebar immediately
       if (!startingFileId) {
@@ -794,7 +802,7 @@ const Dashboard = () => {
                       const splitIndex = match.index + match[1].length;
                       const sentence = speechBuffer.slice(0, splitIndex);
                       if (activeStreamIdRef.current === streamTrackerId && !abortControllerRef.current?.signal.aborted) {
-                          speakChunk(sentence);
+                          if (lastInputWasVoiceRef.current) speakChunk(sentence);
                       }
                       speechBuffer = speechBuffer.slice(splitIndex);
                       match = speechBuffer.match(/([.?!:\n]+)(\s+|$)/);
@@ -862,7 +870,7 @@ const Dashboard = () => {
       
       // Auto-speak any remainder text that didn't hit a punctuation mark
       if (activeStreamIdRef.current === streamTrackerId && speechBuffer.trim() && !abortControllerRef.current?.signal.aborted) {
-          speakChunk(speechBuffer);
+          if (lastInputWasVoiceRef.current) speakChunk(speechBuffer);
       }
 
     } catch (error) {
@@ -1200,12 +1208,11 @@ const Dashboard = () => {
                        </button>
                      )}
 
-                     {isStreaming || isListening ? (
+                     {isListening || (isStreaming && lastInputWasVoiceRef.current) ? (
                         <button 
                           className="submit-btn stop"
                           onClick={() => {
                               if (isListening) {
-                                  // User clicked blue Stop while dictating -> Stop dictating AND send!
                                   manualStopRef.current = true;
                                   if (recognitionRef.current) recognitionRef.current.stop();
                                   setIsListening(false);
@@ -1214,13 +1221,26 @@ const Dashboard = () => {
                                   handleStop();
                               }
                           }}
-                          title={isListening ? "Finish dictating and send" : "Stop generating"}
+                          title={isListening ? "Finish dictating and send" : "Stop speaking"}
                           style={{ backgroundColor: '#244b7a', color: '#88bbfb', borderRadius: '8px', padding: '0 12px', height: '32px', display: 'flex', alignItems: 'center', gap: '4px', width: 'auto', border: 'none', outline: 'none', cursor: 'pointer' }}
                         >
                            <span style={{ fontSize: '18px', letterSpacing: '1px', lineHeight: '1', paddingBottom: '4px' }}>•••</span> <span style={{ fontSize: '14px', fontWeight: '500' }}>Stop</span>
                         </button>
+                     ) : isStreaming ? (
+                        <button 
+                          key="stop-btn"
+                          className="submit-btn stop"
+                          onClick={handleStop}
+                          title="Stop generating"
+                        >
+                           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                             <circle cx="12" cy="12" r="9" />
+                             <rect x="9" y="9" width="6" height="6" fill="currentColor" stroke="none" />
+                           </svg>
+                        </button>
                      ) : (
                         <button 
+                          key="send-btn"
                           className={`submit-btn ${input.trim() || attachedFile ? 'active' : 'idle'}`}
                           onClick={(e) => {
                              if (input.trim() || attachedFile) {

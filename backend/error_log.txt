@@ -1,0 +1,6 @@
+Error: Error code: 400 - {'error': {'message': "Invalid assistant message: role='assistant' content='' tool_calls=None prefix=False", 'type': 'BadRequestError', 'param': None, 'code': 400}}
+Messages: [{"role": "system", "content": "You are DocMind AI. You format your output in dense Markdown. CRITICAL RULE: DO NOT use excessive blank lines. Never pad headings or horizontal rules (`---`) with multiple empty lines. Keep spacing incredibly compact and do NOT output `\\n\\n\\n`."}, {"role": "user", "content": "Can you help me?That my."}, {"role": "assistant", "content": ""}, {"role": "user", "content": "Can you help me? My computer is not charging."}]
+
+Error: Error code: 400 - {'error': {'message': "Invalid assistant message: role='assistant' content='' tool_calls=None prefix=False", 'type': 'BadRequestError', 'param': None, 'code': 400}}
+Messages: [{"role": "system", "content": "You are DocMind AI. You format your output in dense Markdown. CRITICAL RULE: DO NOT use excessive blank lines. Never pad headings or horizontal rules (`---`) with multiple empty lines. Keep spacing incredibly compact and do NOT output `\\n\\n\\n`."}, {"role": "user", "content": "For fine tune and Metra Lama model using.Laura.Left."}, {"role": "assistant", "content": ""}, {"role": "user", "content": "Write a Python program for fine tune and meta llama model using Lora technique."}]
+

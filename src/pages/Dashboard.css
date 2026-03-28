@@ -1023,11 +1023,12 @@ html:has(.claude-dashboard) {
 }
 .submit-btn.stop:hover {
   background: rgba(255, 255, 255, 0.1);
-  border-color: #fb7185;
+  border-color: rgba(255, 255, 255, 0.4);
 }
 .submit-btn.stop svg {
   color: #ffffff;
-  animation: spinBreatheStop 3s linear infinite;
+  /* Smooth scale-in animation when the Stop button mounts */
+  animation: slideUpArrow 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
 .suggestion-tags {
