@@ -135,25 +135,61 @@ const ArtifactTimelineContainer = ({ artifacts, isStreaming, openArtifact, fullC
   const activeStreamIndex = isStreaming ? artifacts.length - 1 : -1;
 
   // Extract custom ACTION text from LLM response if present
-  let headerText = `Created ${artifacts.length} file${artifacts.length !== 1 ? 's' : ''}`;
+  let baseHeaderText = `Created ${artifacts.length} file${artifacts.length !== 1 ? 's' : ''}`;
   const actionMatch = fullContent?.match(/ACTION:\s*(.*)/);
   if (actionMatch) {
-     headerText = actionMatch[1].trim();
+     baseHeaderText = actionMatch[1].trim();
   }
+
+  // Determine ideal target text based on streaming logic
+  let targetText = baseHeaderText;
+  if (isStreaming && activeStreamIndex >= 0) {
+      const activeArt = artifacts[activeStreamIndex];
+      targetText = activeArt.fileDesc ? `Generating ${activeArt.fileName}... (${activeArt.fileDesc})` : `Generating ${activeArt.fileName}...`;
+  }
+
+  // Cross-fade animation states
+  const [displayHeader, setDisplayHeader] = useState("");
+  const [fadeClass, setFadeClass] = useState("header-fade-in");
+
+  // 1. Text swapping transition (only fires when text actually changes)
+  useEffect(() => {
+     if (targetText && displayHeader !== targetText) {
+         if (displayHeader === "") {
+             setDisplayHeader(targetText);
+             return;
+         }
+         setFadeClass("header-fade-out");
+         const timer = setTimeout(() => {
+             setDisplayHeader(targetText);
+             setFadeClass("header-fade-in");
+         }, 300);
+         return () => clearTimeout(timer);
+     }
+  }, [targetText, displayHeader]);
+
+  // Determine span class
+  const spanClasses = `header-text-slide ${fadeClass} ${isStreaming ? 'shimmer-text' : ''}`;
 
   return (
     <div className="artifact-master-accordion" style={{ margin: '16px 0', position: 'relative' }}>
        <div 
          className="accordion-header" 
          onClick={() => setCollapsed(!collapsed)} 
-         style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '8px 0', fontWeight: 400, color: 'var(--claude-text-muted)', fontSize: '0.85rem', userSelect: 'none' }}
+         style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '8px 0', fontWeight: 400, color: 'var(--claude-text-muted)', fontSize: '0.85rem', userSelect: 'none', overflow: 'hidden' }}
        >
-          <ChevronDown size={14} style={{ transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s', color: 'var(--claude-text-muted)' }} />
-          <span>{headerText}</span>
+          <ChevronDown size={14} style={{ transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s', color: 'var(--claude-text-muted)', flexShrink: 0 }} />
+          
+          <div style={{ position: 'relative', flex: 1, height: '1.2rem', display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+             <span className={spanClasses} style={{ position: 'absolute', whiteSpace: 'nowrap', width: '100%', textOverflow: 'ellipsis', overflow: 'hidden', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {displayHeader}
+                {(isStreaming && displayHeader !== baseHeaderText) && <Loader2 size={12} className="streaming-pulse-spin" style={{ color: 'var(--claude-accent)', flexShrink: 0 }} />}
+             </span>
+          </div>
        </div>
        
-       {!collapsed && (
-          <div className="accordion-body" style={{ position: 'relative', marginTop: '8px', paddingBottom: '8px' }}>
+       <div className={`accordion-body-wrapper ${collapsed ? 'collapsed' : 'expanded'}`}>
+          <div className="accordion-body" style={{ position: 'relative', marginTop: '8px', paddingBottom: '8px', minHeight: 0 }}>
              {/* The Master Vertical Line */}
              <div className="stepper-track-line" style={{ position: 'absolute', top: '10px', bottom: '10px', left: '7px', width: '1px', background: 'var(--claude-border)', zIndex: 0 }}></div>
              
@@ -177,7 +213,7 @@ const ArtifactTimelineContainer = ({ artifacts, isStreaming, openArtifact, fullC
                 );
              })}
           </div>
-       )}
+       </div>
     </div>
   );
 };
@@ -478,7 +514,9 @@ const Dashboard = () => {
   
   const [activeArtifact, setActiveArtifact] = useState(null); // Artifact system
   const [artifactDropdownOpen, setArtifactDropdownOpen] = useState(false);
-  const [artifactWidth, setArtifactWidth] = useState(500);
+  const [artifactWidth, setArtifactWidth] = useState(null); // dynamic center fill
+  const [artifactCopied, setArtifactCopied] = useState(false); // feedback animation state
+  const [artifactRefreshing, setArtifactRefreshing] = useState(false); // refresh spinner state
   const isResizingRef = useRef(false);
   
   useEffect(() => {
@@ -1700,7 +1738,7 @@ const Dashboard = () => {
               >
                  <div className="resizer-bump"></div>
               </div>
-              <div className="artifact-side-panel" style={{ width: `${artifactWidth}px`, maxWidth: 'none' }}>
+              <div className="artifact-side-panel" style={{ width: artifactWidth ? `${artifactWidth}px` : '50%', flex: artifactWidth ? 'none' : '1', maxWidth: 'none' }}>
                  <div className="artifact-panel-header" style={{ justifyContent: 'space-between' }}>
                     <div className="artifact-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                        <div className="artifact-header-title" style={{ marginRight: '4px' }}>
@@ -1717,10 +1755,20 @@ const Dashboard = () => {
                         <div className="artifact-dropdown">
                            <button 
                              className="artifact-dropdown-btn left" 
-                             onClick={() => navigator.clipboard.writeText(liveCode)} 
+                             onClick={() => {
+                                 navigator.clipboard.writeText(liveCode);
+                                 setArtifactCopied(true);
+                                 setTimeout(() => setArtifactCopied(false), 2000);
+                             }} 
+                             style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: '60px', justifyContent: 'center' }}
                              title="Copy"
                            >
-                             Copy
+                             {artifactCopied ? (
+                                <>
+                                   <Check size={14} color="#10b981" /> 
+                                   <span style={{ color: '#10b981' }}>Copied</span>
+                                </>
+                             ) : "Copy"}
                            </button>
                            <button 
                              className="artifact-dropdown-btn right"
@@ -1752,8 +1800,15 @@ const Dashboard = () => {
                              </div>
                            )}
                         </div>
-                        <button className="artifact-action-btn" title="Refresh">
-                          <RotateCcw size={15} />
+                        <button 
+                          className="artifact-action-btn" 
+                          title="Refresh"
+                          onClick={() => {
+                             setArtifactRefreshing(true);
+                             setTimeout(() => setArtifactRefreshing(false), 600);
+                          }}
+                        >
+                          <RotateCcw size={15} className={artifactRefreshing ? 'spin-refresh' : ''} />
                         </button>
                         <button className="artifact-action-btn close" onClick={() => setActiveArtifact(null)} title="Close">
                           <X size={16} />
