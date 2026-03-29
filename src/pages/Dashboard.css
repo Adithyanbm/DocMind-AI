@@ -377,11 +377,40 @@ html:has(.claude-dashboard) {
   transition: width 0.15s, background-color 0.15s;
 }
 
-.artifact-resizer:hover::after,
-.artifact-resizer:active::after {
+.artifact-resizer:hover::after {
   width: 3px;
   background-color: var(--claude-accent);
   border-radius: 2px;
+}
+
+.artifact-resizer.is-dragging::after {
+  width: 3px;
+  background-color: #3b82f6; /* Blue when dragging */
+  border-radius: 2px;
+}
+
+.resizer-bump {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 32px;
+  background-color: var(--claude-bg-main); /* Inner theme color */
+  border: 1px solid #ffffff; /* White boundary */
+  border-radius: 4px;
+  z-index: 11;
+  transition: background-color 0.2s, border-color 0.2s;
+  pointer-events: none; /* Let clicks pass through */
+}
+
+.artifact-resizer:hover .resizer-bump {
+  border-color: var(--claude-accent);
+}
+
+.artifact-resizer.is-dragging .resizer-bump {
+  background-color: #3b82f6; /* Blue solid */
+  border-color: #3b82f6;
 }
 
 .artifact-side-panel {
@@ -1779,4 +1808,173 @@ html:has(.claude-dashboard) {
 .artifact-side-panel ::-moz-selection {
   background-color: rgba(229, 147, 103, 0.25) !important;
   color: inherit !important;
+}
+
+/* ── Unified Streaming Timeline Effects ── */
+
+.fade-out {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+.unified-timeline-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  cursor: pointer;
+  padding: 8px 12px;
+  margin-top: -8px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  transition: background 0.2s;
+  position: relative;
+}
+
+.unified-timeline-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* The track line is now handled natively by the accordion body component */
+
+.timeline-document-icon {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--claude-text-main);
+  font-size: 0.85rem;
+  font-weight: 400;
+  background: var(--claude-bg);
+  padding-right: 8px;
+  z-index: 1;
+}
+
+.timeline-document-icon svg {
+  color: var(--claude-text-muted);
+}
+
+.timeline-tag-badge {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--claude-border);
+  color: var(--claude-text-muted);
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-left: 28px;
+}
+
+/* Hide LLM-generated horizontal rules in standard Markdown */
+.markdown-body hr {
+  display: none !important;
+}
+
+/* De-emphasize standard text */
+.markdown-body p, .markdown-body li {
+  color: var(--claude-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+/* --- Artifact Download Grid & Cards --- */
+.artifact-download-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  margin-bottom: 24px;
+}
+
+.artifact-download-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--claude-bg);
+  border: 1px solid var(--claude-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  animation: slideUpIn 0.4s ease-out forwards;
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.artifact-download-card:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.artifact-card-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.artifact-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transform: skewX(-5deg);
+  overflow: hidden;
+}
+
+.artifact-card-icon svg {
+  color: var(--claude-text-muted);
+  transform: skewX(5deg);
+}
+
+.artifact-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.artifact-card-title {
+  color: var(--claude-text-main);
+  font-size: 0.95rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artifact-card-subtitle {
+  color: var(--claude-text-muted);
+  font-size: 0.8rem;
+}
+
+.artifact-card-download-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--claude-text-main);
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  margin-left: 16px;
+}
+
+.artifact-card-download-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+@keyframes slideUpIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }

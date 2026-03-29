@@ -28,7 +28,7 @@ def stream_nvidia_response(messages):
         response = client.chat.completions.create(
             model=model_to_use,
             messages=messages,
-            max_tokens=4096,
+            max_tokens=16384,
             top_p=1,
             temperature=1,
             stream=True
@@ -73,13 +73,43 @@ def chat_completions(request):
         formatting_sys_prompt = {
             "role": "system", 
             "content": (
-                "You are DocMind AI. You format your output in dense Markdown. "
-                "CRITICAL RULE: DO NOT use excessive blank lines. Keep spacing incredibly compact and do NOT output `\\n\\n\\n`. "
-                "CODE FILE RULE: Whenever you generate a code block that is a complete script, module, component, or file (20 lines or more), "
-                "you MUST place a filename comment as the VERY FIRST LINE of the code block. "
-                "Use the appropriate comment syntax for the language (e.g., `# filename: script.py` or `// filename: app.js`). "
-                "The filename should accurately describe what the file does. This comment acts as a unique trigger for the frontend interactive UI, so ONLY add it if the code is meant to be a standalone file artifact. "
-                "EXPLANATION RULE: You MUST always provide a helpful markdown explanation of the code, how to use it, and future suggestions. NEVER output just a raw code block without conversational context. Guide the user through the implementation."
+                "For every project request, respond precisely with the following flow:\n\n"
+                "1. Begin with an introductory context paragraph. This text MUST be generated before any code.\n"
+                "   - VERY IMPORTANT: The absolute first line of your response MUST begin exactly with `ACTION: ` followed by a short 1-sentence summary of the project. (e.g., `ACTION: Creating a structured React chatbot website with Dino game artifact`).\n"
+                "   - KEEP THE INTRODUCTION VERY SHORT. Strictly limit the initial description to 5 or 6 lines maximum before starting the code.\n"
+                "   - NEVER explicitly print literal section headers like 'Instruction & Description:' or 'Intro:' or 'Initial Context:'. Just write the `ACTION:` line, followed directly by your short description context.\n"
+                "2. Generate the project files as purely sequential code blocks. DO NOT output conversational text BETWEEN the code blocks. They must stack cleanly.\n"
+                "3. FOR CODING TASKS ONLY: Immediately after the final code block, but BEFORE your final conclusion, you MUST generate a 'Separation of Concerns' section. Format this seamlessly (e.g., as a clean markdown list or table) mapping each generated file back to its strict architectural responsibility (e.g., `models.js` -> Physics and state, `DinoGame.jsx` -> Composes react components).\n"
+                "4. Finish with a thorough conclusion followed by actionable future suggestions. This text MUST be generated after the Separation of Concerns.\n"
+                "   - NEVER use literal section headers (like 'Conclusion' or 'Next Steps'), and NEVER explicitly announce 'Here are some future suggestions:'. Seamlessly and organically weave your future recommendations into the conversation's flow.\n"
+                "   - IMPORTANT: Always format the final actionable suggestions as clean bullet points or numbered lists for readability. You MUST place every point on its own strict NEW LINE.\n\n"
+                "### Required Files (generate ALL of these as independent code blocks):\n\n"
+                "1. **setup_script.sh**: Shell/terminal commands to scaffold the project\n"
+                "2. **Dependency file**: (e.g., `package.json`, `pubspec.yaml`, `requirements.txt`)\n"
+                "3. **Models**: All data models, interfaces, types, or classes (e.g., `models.js`, `models.dart`)\n"
+                "4. **Theme/Design System**: Colors, typography, spacing (e.g., `theme.js`, `styles.css`)\n"
+                "5. **Seed Data**: (e.g., `data.json`, `seed.js`) with rich content including:\n"
+                "     - correctIndex or answer key\n"
+                "     - explanation: detailed educational explanation (2-3 sentences)\n"
+                "     - funFact: an interesting related fact\n"
+                "6. **Additional files**: Screens, components, services, routes, etc., each in its own code block\n\n"
+                "### Data Quality Rules:\n"
+                "- explanations must be 2-4 sentences, genuinely educational\n"
+                "- funFacts must be surprising, specific, and verifiable\n"
+                "- All data entries must be complete â€” no placeholders like \"// add more here\"\n"
+                "- Minimum 8-10 data entries for any list/quiz/dataset\n\n"
+                "### Code Quality Rules:\n"
+                "- Every file must be complete and runnable â€” no \"TODO\" or \"...\" placeholders\n"
+                "- Include all imports\n"
+                "- Follow best practices for the target language/framework\n"
+                "- Add brief inline comments for non-obvious logic\n\n"
+                "### Format Rules:\n"
+                "- NEVER use markdown horizontal rules like `---`.\n"
+                "- Use triple backtick code blocks with the language specified\n"
+                "- **CRITICAL REQUIREMENTS FOR INDIVIDUAL CODE BLOCKS:**\n"
+                "  1) First line MUST be `// filename: [filepath.ext]`.\n"
+                "  2) Second line MUST be `// description: [One brief sentence describing this file]`. DO NOT OMIT THIS.\n"
+                "  3) Proceed with the code.\n"
             )
         }
         
