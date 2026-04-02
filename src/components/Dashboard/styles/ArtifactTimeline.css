@@ -1,0 +1,28 @@
+/* src/components/Dashboard/styles/ArtifactTimeline.css */
+.artifact-inline-stepper { margin: 16px 0; padding: 12px 16px; background-color: transparent; cursor: pointer; user-select: none; transition: opacity 0.2s; }
+.artifact-inline-stepper:hover { opacity: 0.8; }
+.stepper-header { color: var(--claude-text-muted); font-size: 0.9rem; font-weight: 500; margin-bottom: 12px; display: flex; align-items: center; gap: 4px; }
+.stepper-timeline { display: flex; flex-direction: column; position: relative; padding-left: 8px; }
+.stepper-track-line { position: absolute; top: 14px; bottom: 14px; left: 17px; width: 1px; background-color: var(--claude-border); z-index: 1; }
+.stepper-item { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; position: relative; z-index: 2; }
+.stepper-icon { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; background: var(--claude-bg-main); color: var(--claude-text-muted); border-radius: 4px; border: 1px solid transparent; }
+.stepper-item.done .stepper-icon { color: #c9886a; border-radius: 50%; border: 1px solid #c9886a; }
+.stepper-content { display: flex; align-items: center; gap: 8px; color: var(--claude-text-main); font-size: 0.9rem; }
+.stepper-badge { background: var(--claude-bg-secondary); border: 1px solid var(--claude-border); border-radius: 6px; padding: 2px 8px; font-size: 0.75rem; color: var(--claude-text-muted); }
+
+.unified-timeline-item { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; cursor: pointer; padding: 8px 12px; margin-top: -8px; margin-bottom: 8px; border-radius: 6px; transition: background 0.2s; position: relative; }
+.unified-timeline-item:hover { background: rgba(255, 255, 255, 0.05); }
+.timeline-document-icon { display: flex; align-items: center; gap: 12px; color: var(--claude-text-main); font-size: 0.85rem; background: var(--claude-bg); padding-right: 8px; z-index: 1; }
+.timeline-document-icon svg { color: var(--claude-text-muted); }
+.timeline-tag-badge { background: rgba(255, 255, 255, 0.07); border: 1px solid var(--claude-border); color: var(--claude-text-muted); font-size: 0.72rem; padding: 2px 8px; border-radius: 12px; margin-left: 28px; }
+
+.header-fade-in { animation: slideFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+@keyframes slideFadeIn { 0% { opacity: 0; transform: translateX(12px); } 100% { opacity: 1; transform: translateX(0); } }
+.header-fade-out { animation: slideFadeOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+@keyframes slideFadeOut { 0% { opacity: 1; transform: translateX(0); } 100% { opacity: 0; transform: translateX(-12px); } }
+.streaming-pulse-spin { animation: pulseSpin 1s infinite linear; }
+@keyframes pulseSpin { 0% { transform: rotate(0deg); opacity: 0.4; } 50% { opacity: 1; } 100% { transform: rotate(360deg); opacity: 0.4; } }
+.accordion-body-wrapper { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-out, visibility 0.3s; overflow: hidden; opacity: 0; visibility: hidden; }
+.accordion-body-wrapper.expanded { grid-template-rows: 1fr; opacity: 1; visibility: visible; }
+.shimmer-text { mask-image: linear-gradient(to right, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 50%, rgba(0,0,0,1) 60%); mask-size: 400% 100%; animation: shadeSweep 6s ease-in-out infinite; }
+@keyframes shadeSweep { 0% { mask-position: 100% 0; } 100% { mask-position: -100% 0; } }

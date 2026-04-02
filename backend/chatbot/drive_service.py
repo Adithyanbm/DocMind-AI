@@ -169,3 +169,33 @@ def delete_chat_from_drive(access_token, file_id):
             "success": False,
             "error": str(e)
         }
+
+def rename_chat_on_drive(access_token, file_id, new_name):
+    """
+    Renames a specific chat file on the user's Google Drive.
+    """
+    try:
+        service = get_drive_service(access_token)
+        # Ensure the filename follows the DocMind convention
+        safe_name = "".join([c if c.isalnum() or c in [' ', '-', '_'] else "" for c in new_name])
+        file_name = f'DocMind_Chat_{safe_name.replace(" ", "_")}.md'
+        
+        file_metadata = {'name': file_name}
+        updated_file = service.files().update(
+            fileId=file_id,
+            body=file_metadata,
+            fields='id, name'
+        ).execute()
+        
+        return {
+            "success": True,
+            "file_id": updated_file.get('id'),
+            "name": updated_file.get('name')
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
+        }

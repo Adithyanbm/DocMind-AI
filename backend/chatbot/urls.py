@@ -7,4 +7,5 @@ urlpatterns = [
     path('history/', views.get_chat_history, name='get_chat_history'),
     path('history/<str:file_id>/', views.get_chat_session, name='get_chat_session'),
     path('history/<str:file_id>/delete/', views.delete_chat_session, name='delete_chat_session'),
+    path('history/<str:file_id>/rename/', views.rename_chat_session, name='rename_chat_session'),
 ]

@@ -1,0 +1,64 @@
+/* src/components/Dashboard/styles/Workspace.css */
+.claude-workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-width: 0;
+}
+
+.workspace-header {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  justify-content: flex-start;
+  position: relative;
+  gap: 4px;
+}
+
+.sidebar-toggle { flex-shrink: 0; }
+
+.model-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--claude-text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 20px;
+  transition: background 0.2s;
+}
+
+.model-selector:hover { background: rgba(255, 255, 255, 0.05); color: var(--claude-text-main); }
+
+.workspace-body { display: flex; flex: 1; min-height: 0; width: 100%; overflow: hidden; }
+
+.workspace-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+  transition: min-width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  min-width: 400px;
+}
+.workspace-content.empty { justify-content: center; }
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--claude-text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover { background: rgba(255, 255, 255, 0.05); color: var(--claude-text-main); }

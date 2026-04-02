@@ -1,0 +1,104 @@
+/* src/components/Dashboard/styles/ArtifactPanel.css */
+.artifact-resizer {
+  width: 4px;
+  cursor: col-resize;
+  background-color: transparent;
+  flex-shrink: 0;
+  transition: background-color 0.15s;
+  z-index: 10;
+  position: relative;
+}
+
+.artifact-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  height: 100%;
+  background-color: var(--claude-border);
+  transition: width 0.15s, background-color 0.15s;
+}
+
+.artifact-resizer:hover::after { width: 3px; background-color: var(--claude-accent); border-radius: 2px; }
+.artifact-resizer.is-dragging::after { width: 3px; background-color: #3b82f6; border-radius: 2px; }
+
+.resizer-bump {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 32px;
+  background-color: var(--claude-bg-main);
+  border: 1px solid #ffffff;
+  border-radius: 4px;
+  z-index: 11;
+  transition: background-color 0.2s, border-color 0.2s;
+  pointer-events: none;
+}
+
+.artifact-resizer:hover .resizer-bump { border-color: var(--claude-accent); }
+.artifact-resizer.is-dragging .resizer-bump { background-color: #3b82f6; border-color: #3b82f6; }
+
+.artifact-side-panel {
+  min-width: 380px;
+  background-color: var(--claude-bg-main);
+  display: flex;
+  flex-direction: column;
+  animation: slidePanelIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border-left: 1px solid var(--claude-border);
+  z-index: 9;
+  overflow: hidden;
+}
+
+@keyframes slidePanelIn {
+  from { width: 0; min-width: 0; opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes spinRefresh {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+.spin-refresh { animation: spinRefresh 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+
+.artifact-panel-header {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--claude-border);
+  background: var(--claude-bg-main);
+  flex-shrink: 0;
+}
+
+.artifact-header-left { display: flex; align-items: center; gap: 10px; color: var(--claude-text-main); min-width: 0; overflow: hidden; }
+.artifact-header-title { font-weight: 550; font-size: 0.88rem; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--claude-text-main); }
+
+.artifact-header-live { display: inline-flex; align-items: center; gap: 4px; font-size: 0.68rem; color: var(--claude-accent); font-weight: 500; }
+.artifact-header-live-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--claude-accent); animation: livePulse 1.5s ease-in-out infinite; }
+
+@keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.artifact-header-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.artifact-action-btn { background: transparent; border: none; color: var(--claude-text-muted); cursor: pointer; padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.artifact-action-btn:hover { background: var(--claude-hover); color: var(--claude-text-main); }
+.artifact-action-btn.close:hover { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+
+.artifact-panel-body { flex: 1; overflow: auto; background-color: #1e1e1e; }
+.claude-dashboard.theme-light .artifact-panel-body { background-color: #fafafa; }
+.artifact-panel-body::-webkit-scrollbar { width: 6px; height: 6px; }
+.artifact-panel-body::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.08); border-radius: 3px; }
+
+.artifact-dropdown { position: relative; display: flex; align-items: center; }
+.artifact-dropdown-btn { display: flex; align-items: center; background: transparent; border: 1px solid var(--claude-border); color: var(--claude-text-main); font-size: 0.82rem; padding: 5px 10px; cursor: pointer; transition: all 0.15s; }
+.artifact-dropdown-btn.left { border-radius: 6px 0 0 6px; border-right: none; }
+.artifact-dropdown-btn.right { border-radius: 0 6px 6px 0; padding: 5px 6px; }
+.artifact-dropdown-content { position: absolute; top: 100%; right: 0; margin-top: 4px; background: #2a2a2a; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); display: none; flex-direction: column; min-width: 140px; z-index: 1000; }
+.artifact-dropdown-item { padding: 10px 14px; color: #dfdbd8; font-size: 0.85rem; background: transparent; border: none; text-align: left; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+.artifact-dropdown-item:hover { background: rgba(255, 255, 255, 0.08); }
+
+.artifact-side-panel ::selection { background-color: rgba(229, 147, 103, 0.25) !important; color: inherit !important; }
