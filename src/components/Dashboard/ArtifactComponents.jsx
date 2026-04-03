@@ -139,12 +139,36 @@ export const ArtifactDownloadGrid = ({ artifacts, openArtifact }) => {
           onClick={() => openArtifact(idx, art.lang, art.code)}
         >
           <div className="artifact-card-left">
-            <div className="artifact-card-icon">
-              <Code size={18} />
+            <div className="artifact-card-icon-box" style={{ background: 'transparent', border: 'none' }}>
+              <svg 
+                width="40" 
+                height="48" 
+                viewBox="0 0 110 136" 
+                xmlns="http://www.w3.org/2000/svg"
+                className="doc-icon-svg"
+              >
+                {/* Full user-provided SVG paths */}
+                <rect x="0" y="0" width="110" height="136" rx="20" fill="#2c2f2c"/>
+                <rect x="0.75" y="0.75" width="108.5" height="134.5" rx="19.5" fill="none" stroke="#484d48" strokeWidth="1.5"/>
+                <g transform="translate(28, 28)">
+                  <path d="M8 0 L38 0 L54 16 L54 68 L8 68 Z"
+                        fill="none"
+                        stroke="#9aa09a"
+                        strokeWidth="2.2"
+                        strokeLinejoin="round"
+                        strokeLinecap="round"/>
+                  <path d="M38 0 L38 16 L54 16"
+                        fill="none"
+                        stroke="#9aa09a"
+                        strokeWidth="2.2"
+                        strokeLinejoin="round"
+                        strokeLinecap="round"/>
+                </g>
+              </svg>
             </div>
             <div className="artifact-card-details">
               <span className="artifact-card-title">{art.fileName.split('.')[0]}</span>
-              <span className="artifact-card-subtitle">Code · {art.lang.toUpperCase()}</span>
+              <span className="artifact-card-subtitle">{art.lang.toUpperCase()}</span>
             </div>
           </div>
           <button 

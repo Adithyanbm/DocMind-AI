@@ -156,6 +156,8 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.05) transparent;
 }
 
 .sidebar-recents::-webkit-scrollbar { width: 6px; }

@@ -39,14 +39,25 @@ export const inferCodeName = (rawCode, lang) => {
  */
 export const cleanMarkdown = (text) => {
   if (!text) return '';
-  let processedText = text.replace(/ACTION:\s*(.*)(\n|$)/g, '');
+  
+  // 1. Identify and preserve ACTION line for UI feedback if it's the only content
+  const actionMatch = text.match(/ACTION:\s*(.*)/);
+  let cleaned = text.replace(/ACTION:\s*(.*)(\n|$)/g, '').trim();
+  
+  if (!cleaned && actionMatch) {
+    // If we only have an ACTION line, show it subtly instead of stripping it completely 
+    // This prevents 'empty' bubbles during project generation.
+    return `*${actionMatch[1]}*`;
+  }
+  
+  let processedText = cleaned || text.replace(/ACTION:\s*(.*)(\n|$)/g, '');
 
   const match = processedText.match(/^\s*```(?:markdown|md)\s*?\n([\s\S]*)$/i);
-  let cleaned = processedText;
+  let finalCleaned = processedText;
   if (match) {
-    cleaned = match[1].replace(/\n?```\s*$/, '');
+    finalCleaned = match[1].replace(/\n?```\s*$/, '');
   }
-  return cleaned
+  return finalCleaned
     .replace(/\n{3,}/g, '\n\n')
     .replace(/^([*+-]|\d+\.)\s*\n+/gm, '$1 ');
 };

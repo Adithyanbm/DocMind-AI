@@ -3,6 +3,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 import io
 import datetime
+import json
 
 def get_drive_service(access_token):
     """
@@ -13,7 +14,8 @@ def get_drive_service(access_token):
 
 def upload_chat_to_drive(access_token, messages, file_id=None):
     """
-    Uploads the chat history to the user's Google Drive.
+    Uploads the chat history to the user's Google Drive as a Markdown file.
+    Includes persistent metadata for PDF attachments and images.
     """
     try:
         service = get_drive_service(access_token)
@@ -31,6 +33,7 @@ def upload_chat_to_drive(access_token, messages, file_id=None):
                     user_text = str(content)[:30].strip()
                     original_len = len(str(content))
                     
+                # Clean filename characters
                 title_summary = "".join([c if c.isalnum() or c in [' ', '-', '_'] else "" for c in user_text])
                 if original_len > 30:
                     title_summary += "..."
@@ -43,26 +46,82 @@ def upload_chat_to_drive(access_token, messages, file_id=None):
         formatted_content = f"# DocMind AI Chat Session\n*Saved on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n\n---\n\n"
         
         for msg in messages:
-            role = "You" if msg.get("role") == "user" else "DocMind AI"
+            # Use 'You' and 'DocMind AI' as role markers for consistency with the frontend parser
+            role_marker = "You" if msg.get("role") == "user" else "DocMind AI"
             content = msg.get("content", "")
+            reasoning = msg.get("reasoning_content")
             
-            # If the content is a list (e.g., from Vision API), extract just the text parts
-            # and format the image as an inline markdown image.
+            parts_text = []
+            
+            # Prepend reasoning content if available (hidden or visible)
+            if role_marker == "DocMind AI" and reasoning:
+                parts_text.append(f"<reasoning>\n{reasoning}\n</reasoning>")
+            
+            # Handle complex content (e.g., from Vision/File AI)
             if isinstance(content, list):
-                text_parts = []
-                # Keep tracking if we found an image url among the content
                 for part in content:
-                    if part.get("type") == "text":
-                        text_parts.append(part.get("text", ""))
-                    elif part.get("type") == "image_url":
+                    ptype = part.get("type")
+                    if ptype == "text":
+                        parts_text.append(part.get("text", ""))
+                    elif ptype == "image_url":
                         img_url = part.get("image_url", {}).get("url", "")
                         if img_url:
-                            # Embed the base64 code strictly as a markdown image format
-                            text_parts.append(f"![Attached Image]({img_url})")
+                            parts_text.append(f"![Attached Image]({img_url})")
+                    elif ptype == "file":
+                        file_name = part.get("file_url", {}).get("name", "document.pdf")
+                        
+                        # Extract metadata from the message object (passed from Dashboard.jsx)
+                        thumbnail = msg.get("attachmentData") if msg.get("attachmentType") == "application/pdf" else None
+                        pages = msg.get("attachmentNumPages", 0)
+                        base64_data = msg.get("attachmentBase64")
+                        
+                        meta = json.dumps({
+                            "name": file_name,
+                            "pages": pages,
+                            "base64": base64_data,
+                            "type": "application/pdf"
+                        })
+                        
+                        if thumbnail:
+                            parts_text.append(f"![PDF Preview]({thumbnail})")
+                        
+                        parts_text.append(f"<!-- PDF_METADATA: {meta} -->")
+                        parts_text.append(f"[PDF Attachment: {file_name}]")
                 
-                content = "\n\n".join(text_parts)
+                content_str = "\n\n".join(parts_text)
+            else:
+                # Handle direct attachments stored at the top level
+                if msg.get("attachmentData") and msg.get("attachmentType"):
+                    if msg.get("attachmentType").startswith('image/'):
+                        parts_text.append(f"![Attached Image]({msg.get('attachmentData')})")
+                        parts_text.append(str(content))
+                    elif msg.get("attachmentType") == 'application/pdf':
+                        meta = json.dumps({
+                            "name": msg.get("attachment"),
+                            "pages": msg.get("attachmentNumPages", 0),
+                            "base64": msg.get("attachmentBase64"),
+                            "type": "application/pdf"
+                        })
+                        parts_text.append(f"![PDF Preview]({msg.get('attachmentData')})")
+                        parts_text.append(f"<!-- PDF_METADATA: {meta} -->")
+                        parts_text.append(str(content))
+                    content_str = "\n\n".join(parts_text)
+                else:
+                    content_str = str(content)
                 
-            formatted_content += f"**{role}:**\n{content}\n\n"
+            timestamp = msg.get("timestamp", "")
+            ts_meta = f"<!-- TIMESTAMP: {timestamp} -->" if timestamp else ""
+            
+            # Encode versions if present
+            versions = msg.get("versions", [])
+            versions_meta = ""
+            if versions:
+                import json, base64
+                ver_json = json.dumps(versions)
+                ver_b64 = base64.b64encode(ver_json.encode('utf-8')).decode('utf-8')
+                versions_meta = f"<!-- VERSIONS: {ver_b64} -->"
+            
+            formatted_content += f"**{role_marker}:**\n{ts_meta}\n{versions_meta}\n{content_str}\n\n"
             
         file_content = io.BytesIO(formatted_content.encode('utf-8'))
         
@@ -71,49 +130,36 @@ def upload_chat_to_drive(access_token, messages, file_id=None):
             'mimeType': 'text/markdown'
         }
         
-        media = MediaIoBaseUpload(file_content, mimetype='text/markdown', resumable=True)
-        
-        file_metadata_update = {
-            'name': f'DocMind_Chat_{title_summary.replace(" ", "_").replace("...", "")}.md'
-        }
-        
         if file_id:
-            # Update existing file and name
-            file = service.files().update(fileId=file_id, body=file_metadata_update, media_body=media, fields='id, name, webViewLink').execute()
+            media = MediaIoBaseUpload(file_content, mimetype='text/markdown', resumable=True)
+            updated_file = service.files().update(
+                fileId=file_id,
+                body={'name': file_metadata['name']},
+                media_body=media
+            ).execute()
+            return {"success": True, "file_id": updated_file.get("id"), "name": updated_file.get("name")}
         else:
-            # Create a new file
-            file_metadata = {
-                'name': f'DocMind_Chat_{title_summary.replace(" ", "_").replace("...", "")}.md',
-                'mimeType': 'text/markdown'
-            }
-            file = service.files().create(body=file_metadata, media_body=media, fields='id, name, webViewLink').execute()
-        
-        return {
-            "success": True,
-            "file_id": file.get('id'),
-            "name": file.get('name'),
-            "link": file.get('webViewLink')
-        }
-        
+            media = MediaIoBaseUpload(file_content, mimetype='text/markdown', resumable=True)
+            file = service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id, name'
+            ).execute()
+            return {"success": True, "file_id": file.get("id"), "name": file.get("name")}
+            
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}
 
 def list_drive_chats(access_token):
     """
-    Lists all Markdown chat files created by DocMind AI in the user's Google Drive.
+    Lists all DocMind chat files in the user's Google Drive.
     """
     try:
         service = get_drive_service(access_token)
-        
-        # Query: Find all files named DocMind_Chat_*.md
-        query = "name contains 'DocMind_Chat_' and mimeType='text/markdown' and trashed=false"
-        
-        results = service.files().list(q=query, spaces='drive', fields='files(id, name, createdTime, modifiedTime)', orderBy='modifiedTime desc').execute()
+        query = "name contains 'DocMind_Chat_' and mimeType = 'text/markdown' and trashed = false"
+        results = service.files().list(q=query, fields="files(id, name, modifiedTime)", orderBy="modifiedTime desc").execute()
         items = results.get('files', [])
         
         return {
@@ -134,14 +180,9 @@ def get_drive_chat_content(access_token, file_id):
     """
     try:
         service = get_drive_service(access_token)
-        
-        # Get the file's binary content
         request = service.files().get_media(fileId=file_id)
         file_content = request.execute()
-        
-        # Decode the bytes into a string
         text_content = file_content.decode('utf-8')
-        
         return {
             "success": True,
             "content": text_content
@@ -156,46 +197,32 @@ def get_drive_chat_content(access_token, file_id):
 
 def delete_chat_from_drive(access_token, file_id):
     """
-    Deletes a specific chat file from the user's Google Drive.
+    Trashes a chat file on Google Drive.
     """
     try:
         service = get_drive_service(access_token)
-        service.files().delete(fileId=file_id).execute()
+        service.files().update(fileId=file_id, body={'trashed': True}).execute()
         return {"success": True}
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}
 
 def rename_chat_on_drive(access_token, file_id, new_name):
     """
-    Renames a specific chat file on the user's Google Drive.
+    Renames a chat file on Google Drive.
     """
     try:
         service = get_drive_service(access_token)
-        # Ensure the filename follows the DocMind convention
-        safe_name = "".join([c if c.isalnum() or c in [' ', '-', '_'] else "" for c in new_name])
-        file_name = f'DocMind_Chat_{safe_name.replace(" ", "_")}.md'
-        
-        file_metadata = {'name': file_name}
-        updated_file = service.files().update(
-            fileId=file_id,
-            body=file_metadata,
-            fields='id, name'
-        ).execute()
-        
-        return {
-            "success": True,
-            "file_id": updated_file.get('id'),
-            "name": updated_file.get('name')
-        }
+        # Ensure the filename maintains the expected pattern if not provided
+        if not new_name.startswith('DocMind_Chat_'):
+            new_name = f"DocMind_Chat_{new_name.replace(' ', '_')}"
+        if not new_name.endswith('.md'):
+            new_name += ".md"
+            
+        updated_file = service.files().update(fileId=file_id, body={'name': new_name}).execute()
+        return {"success": True, "name": updated_file.get("name")}
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}

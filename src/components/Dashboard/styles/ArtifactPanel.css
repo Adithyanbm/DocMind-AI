@@ -88,7 +88,7 @@
 .artifact-action-btn:hover { background: var(--claude-hover); color: var(--claude-text-main); }
 .artifact-action-btn.close:hover { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
 
-.artifact-panel-body { flex: 1; overflow: auto; background-color: #1e1e1e; }
+.artifact-panel-body { flex: 1; overflow: auto; background-color: #1e1e1e; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.08) transparent; }
 .claude-dashboard.theme-light .artifact-panel-body { background-color: #fafafa; }
 .artifact-panel-body::-webkit-scrollbar { width: 6px; height: 6px; }
 .artifact-panel-body::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.08); border-radius: 3px; }

@@ -216,4 +216,3 @@
   border-color: rgba(255, 106, 0, 0.5);
 }
 
-.template-popup { position: absolute; top: 100%; margin-top: 12px; left: 0; right: 0; background-color: var(--claude-bg-sidebar); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); z-index: 50; max-width: 600px; max-height: 250px; overflow-y: auto; }

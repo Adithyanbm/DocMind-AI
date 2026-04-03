@@ -16,3 +16,195 @@ Messages: [{"role": "system", "content": "You are DocMind AI, a helpful assistan
 Error: Error code: 400 - {'error': {'message': "Invalid assistant message: role='assistant' content='' tool_calls=None prefix=False", 'type': 'BadRequestError', 'param': None, 'code': 400}}
 Messages: [{"role": "system", "content": "You are DocMind AI, a helpful assistant. Respond naturally to greetings and general questions.\n\nONLY IF the user requests a project, a coding task, or a set of files, follow this precise flow:\n\n1. Begin with an introductory context paragraph. This text MUST be generated before any code.\n   - VERY IMPORTANT: The absolute first line of your response MUST begin exactly with `ACTION: ` followed by a short 1-sentence summary of the project. (e.g., `ACTION: Creating a structured React chatbot website with Dino game artifact`).\n   - KEEP THE INTRODUCTION VERY SHORT. Strictly limit the initial description to 5 or 6 lines maximum before starting the code.\n   - NEVER explicitly print literal section headers like 'Instruction & Description:' or 'Intro:' or 'Initial Context:'. Just write the `ACTION:` line, followed directly by your short description context.\n2. Generate the project files as purely sequential code blocks. DO NOT output conversational text BETWEEN the code blocks. They must stack cleanly.\n3. Immediately after the final code block, but BEFORE your final conclusion, you MUST generate a 'Separation of Concerns' section. Format this seamlessly (e.g., as a clean markdown list or table) mapping each generated file back to its strict architectural responsibility (e.g., `models.js` -> Physics and state, `DinoGame.jsx` -> Composes react components).\n4. Finish with a thorough conclusion followed by actionable future suggestions. This text MUST be generated after the Separation of Concerns.\n   - NEVER use literal section headers (like 'Conclusion' or 'Next Steps'), and NEVER explicitly announce 'Here are some future suggestions:'. Seamlessly and organically weave your future recommendations into the conversation's flow.\n   - IMPORTANT: Always format the final actionable suggestions as clean bullet points or numbered lists for readability. You MUST place every point on its own strict NEW LINE.\n\n### Project Requirements (ONLY for coding/project tasks):\nGenerate the following as independent code blocks if applicable:\n1. **setup_script.sh**: Commands to scaffold the project\n2. **Dependency file**: (e.g., `package.json`, `pubspec.yaml`, `requirements.txt`)\n3. **Models**: All data models, interfaces, types, or classes\n4. **Theme/Design System**: Colors, typography, spacing\n5. **Seed Data**: (if applicable) with rich content\n6. **Additional files**: Screens, components, services, etc.\n\n### Quality Rules for Code/Data:\n- explanations must be 2-4 sentences, genuinely educational\n- funFacts must be surprising, specific, and verifiable\n- Every file must be complete and runnable \u00e2\u20ac\u201d no placeholders\n- Include all imports and add brief inline comments\n\n### Format Rules:\n- NEVER use markdown horizontal rules like `---`.\n- Use triple backtick code blocks with the language specified\n- **CRITICAL REQUIREMENTS FOR INDIVIDUAL CODE BLOCKS:**\n  1) First line MUST be `// filename: [filepath.ext]`.\n  2) Second line MUST be `// description: [One brief sentence describing this file]`. DO NOT OMIT THIS.\n"}, {"role": "user", "content": "hello"}, {"role": "assistant", "content": ""}, {"role": "user", "content": "mnkk"}, {"role": "assistant", "content": ""}, {"role": "user", "content": "dcdc"}]
 
+Error: Error code: 400 - {'object': 'error', 'message': 'At most 1 image(s) may be provided in one request. You can set `--limit-mm-per-prompt` to increase this limit if the model supports it.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+Traceback (most recent call last):
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\chatbot\views.py", line 85, in stream_nvidia_response
+    response = client.chat.completions.create(
+        model=model_to_use,
+    ...<4 lines>...
+        stream=True
+    )
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_utils\_utils.py", line 286, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\resources\chat\completions\completions.py", line 1211, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/chat/completions",
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<47 lines>...
+        stream_cls=Stream[ChatCompletionChunk],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_base_client.py", line 1297, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_base_client.py", line 1070, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.BadRequestError: Error code: 400 - {'object': 'error', 'message': 'At most 1 image(s) may be provided in one request. You can set `--limit-mm-per-prompt` to increase this limit if the model supports it.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+
+
+Error: Error code: 400 - {'object': 'error', 'message': 'At most 1 image(s) may be provided in one request. You can set `--limit-mm-per-prompt` to increase this limit if the model supports it.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+Traceback (most recent call last):
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\chatbot\views.py", line 85, in stream_nvidia_response
+    response = client.chat.completions.create(
+        model=model_to_use,
+    ...<4 lines>...
+        stream=True
+    )
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_utils\_utils.py", line 286, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\resources\chat\completions\completions.py", line 1211, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/chat/completions",
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<47 lines>...
+        stream_cls=Stream[ChatCompletionChunk],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_base_client.py", line 1297, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_base_client.py", line 1070, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.BadRequestError: Error code: 400 - {'object': 'error', 'message': 'At most 1 image(s) may be provided in one request. You can set `--limit-mm-per-prompt` to increase this limit if the model supports it.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+
+
+Error: Error code: 400 - {'object': 'error', 'message': 'At most 1 image(s) may be provided in one request. You can set `--limit-mm-per-prompt` to increase this limit if the model supports it.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+Traceback (most recent call last):
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\chatbot\views.py", line 85, in stream_nvidia_response
+    response = client.chat.completions.create(
+        model=model_to_use,
+    ...<4 lines>...
+        stream=True
+    )
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_utils\_utils.py", line 286, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\resources\chat\completions\completions.py", line 1211, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/chat/completions",
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<47 lines>...
+        stream_cls=Stream[ChatCompletionChunk],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_base_client.py", line 1297, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_base_client.py", line 1070, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.BadRequestError: Error code: 400 - {'object': 'error', 'message': 'At most 1 image(s) may be provided in one request. You can set `--limit-mm-per-prompt` to increase this limit if the model supports it.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+
+
+Error: Error code: 400 - {'object': 'error', 'message': 'At most 1 image(s) may be provided in one request. You can set `--limit-mm-per-prompt` to increase this limit if the model supports it.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+Traceback (most recent call last):
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\chatbot\views.py", line 85, in stream_nvidia_response
+    response = client.chat.completions.create(
+        model=model_to_use,
+    ...<4 lines>...
+        stream=True
+    )
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_utils\_utils.py", line 286, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\resources\chat\completions\completions.py", line 1211, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/chat/completions",
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<47 lines>...
+        stream_cls=Stream[ChatCompletionChunk],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_base_client.py", line 1297, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_base_client.py", line 1070, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.BadRequestError: Error code: 400 - {'object': 'error', 'message': 'At most 1 image(s) may be provided in one request. You can set `--limit-mm-per-prompt` to increase this limit if the model supports it.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+
+
+Error: Error code: 400 - {'object': 'error', 'message': 'At most 1 image(s) may be provided in one request. You can set `--limit-mm-per-prompt` to increase this limit if the model supports it.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+Traceback (most recent call last):
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\chatbot\views.py", line 85, in stream_nvidia_response
+    response = client.chat.completions.create(
+        model=model_to_use,
+    ...<4 lines>...
+        stream=True
+    )
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_utils\_utils.py", line 286, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\resources\chat\completions\completions.py", line 1211, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/chat/completions",
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<47 lines>...
+        stream_cls=Stream[ChatCompletionChunk],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_base_client.py", line 1297, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_base_client.py", line 1070, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.BadRequestError: Error code: 400 - {'object': 'error', 'message': 'At most 1 image(s) may be provided in one request. You can set `--limit-mm-per-prompt` to increase this limit if the model supports it.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+
+
+Error: Error code: 400 - {'object': 'error', 'message': 'At most 1 image(s) may be provided in one request. You can set `--limit-mm-per-prompt` to increase this limit if the model supports it.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+Traceback (most recent call last):
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\chatbot\views.py", line 85, in stream_nvidia_response
+    response = client.chat.completions.create(
+        model=model_to_use,
+    ...<4 lines>...
+        stream=True
+    )
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_utils\_utils.py", line 286, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\resources\chat\completions\completions.py", line 1211, in create
+    return self._post(
+           ~~~~~~~~~~^
+        "/chat/completions",
+        ^^^^^^^^^^^^^^^^^^^^
+    ...<47 lines>...
+        stream_cls=Stream[ChatCompletionChunk],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_base_client.py", line 1297, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Adith\OneDrive\Desktop\AIchatbot\backend\venv\Lib\site-packages\openai\_base_client.py", line 1070, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.BadRequestError: Error code: 400 - {'object': 'error', 'message': 'At most 1 image(s) may be provided in one request. You can set `--limit-mm-per-prompt` to increase this limit if the model supports it.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+
+
+
+Error: Error code: 504
+Messages count: 4
+Model used: mistralai/mistral-large-3-675b-instruct-2512
+
+Error: list index out of range
+Messages count: 2
+Model used: mistralai/mistral-large-3-675b-instruct-2512
+
+Error: list index out of range
+Messages count: 4
+Model used: mistralai/mistral-large-3-675b-instruct-2512
+
+Error: list index out of range
+Messages count: 6
+Model used: mistralai/mistral-large-3-675b-instruct-2512
+
+Error: Error code: 504
+Messages count: 2
+Model used: meta/llama-3.2-90b-vision-instruct
+
+Error: Error code: 504
+Messages count: 2
+Model used: meta/llama-3.2-90b-vision-instruct
