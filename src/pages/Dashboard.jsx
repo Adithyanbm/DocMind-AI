@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import {
-  Bot, Menu, Plus, Search, MessageSquare, Settings, ArrowUp, X, HardDrive, AlertTriangle,
+  Bot, Menu, Plus, Search, MessageSquare, Settings, ArrowUp, X, HardDrive, AlertTriangle, Check,
   ChevronDown, ChevronRight, Sparkles, Paperclip, Camera, FolderPlus, Book, Blocks, Globe, PenTool,
   Mic, MicOff, Star, Pencil, Trash2, Layers, Compass, MessageCircle, GraduationCap, Heart, Lightbulb
 } from 'lucide-react';
@@ -96,6 +96,7 @@ const Dashboard = () => {
   const backgroundStreamsRef = useRef({});
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [previewData, setPreviewData] = useState(null);
+  const [webSearchActive, setWebSearchActive] = useState(false);
 
   const handleSubmitRef = useRef(null);
 
@@ -238,6 +239,10 @@ const Dashboard = () => {
         setRecentChats(data.files);
       }
     } catch (err) {
+      if (err.status === 401 || err.error === 'unauthorized') {
+        console.warn("Google Drive token expired, clearing...");
+        localStorage.removeItem('google_access_token');
+      }
       console.error("Failed to fetch recent chats", err);
     }
   };
@@ -400,6 +405,9 @@ const Dashboard = () => {
         if (window.innerWidth <= 768) setSidebarOpen(false);
       }
     } catch (err) {
+      if (err.status === 401 || err.error === 'unauthorized') {
+        localStorage.removeItem('google_access_token');
+      }
       console.error("Failed to load chat", err);
     }
   };
@@ -429,6 +437,9 @@ const Dashboard = () => {
       }
       return null;
     } catch (err) {
+      if (err.status === 401 || err.error === 'unauthorized') {
+        localStorage.removeItem('google_access_token');
+      }
       console.error("Auto-save failed", err);
       return null;
     } finally {
@@ -595,6 +606,61 @@ const Dashboard = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const handleCaptureScreenshot = async () => {
+    try {
+      setShowAttachmentMenu(false);
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { cursor: "always" },
+        audio: false
+      });
+      
+      setIsAttachmentLoading(true);
+
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      
+      // We must wait for metadata to be loaded so we know dimensions
+      await new Promise((resolve) => {
+        video.onloadedmetadata = () => resolve();
+      });
+      video.play();
+
+      // Wait a brief moment for the 'video' to actually start rendering frames
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Convert to base64
+      const fullDataUrl = canvas.toDataURL("image/png");
+      const base64String = fullDataUrl.split(",")[1];
+      const fileName = `Screenshot_${new Date().toLocaleTimeString(undefined, { hour12: false }).replace(/:/g, "-")}.png`;
+
+      // Stop all tracks to release the stream
+      stream.getTracks().forEach(track => track.stop());
+
+      // Show shimmer briefly then attach
+      setTimeout(() => {
+        setAttachedFile({
+          name: fileName,
+          type: "image/png",
+          size: Math.round((base64String.length * 3) / 4),
+          base64: base64String,
+          thumbnail: null,
+          numPages: 0
+        });
+        setIsAttachmentLoading(false);
+      }, 800);
+
+    } catch (err) {
+      console.error("Screenshot capture failed", err);
+      setIsAttachmentLoading(false);
+    }
+  };
+
   const handleStop = () => {
     if (abortControllerRef.current) abortControllerRef.current.abort();
     stopSpeaking();
@@ -744,11 +810,6 @@ const Dashboard = () => {
       content: m.apiContent || m.content
     }));
 
-    apiMessages.unshift({
-      role: 'system',
-      content: "You are DocMind AI. The user may be utilizing speech-to-text dictation. You must ensure all generated responses are perfectly grammatically correct, highly coherent, and clearly formatted."
-    });
-
     const streamTrackerId = Date.now().toString();
     let startingFileId = currentFileIdRef.current;
 
@@ -767,7 +828,7 @@ const Dashboard = () => {
 
       let response;
       try {
-        response = await chatService.getChatCompletions(apiMessages, abortControllerRef.current.signal);
+        response = await chatService.getChatCompletions(apiMessages, abortControllerRef.current.signal, webSearchActive);
       } catch (fErr) {
         if (fErr.name === 'AbortError') return;
         console.error("Fetch error detected", fErr);
@@ -1219,7 +1280,7 @@ const Dashboard = () => {
                               <span>Add files or photos</span>
                               <span className="shortcut">Ctrl+U</span>
                             </button>
-                            <button className="popover-item" onClick={() => setShowAttachmentMenu(false)}>
+                            <button className="popover-item" onClick={handleCaptureScreenshot}>
                               <Camera size={16} />
                               <span>Take a screenshot</span>
                             </button>
@@ -1237,9 +1298,13 @@ const Dashboard = () => {
                               <Blocks size={16} />
                               <span>Add connectors</span>
                             </button>
-                            <button className="popover-item" onClick={() => setShowAttachmentMenu(false)}>
+                            <button 
+                              className={`popover-item ${webSearchActive ? 'active' : ''}`} 
+                              onClick={() => setWebSearchActive(!webSearchActive)}
+                            >
                               <Globe size={16} />
                               <span>Web search</span>
+                              {webSearchActive && <Check size={14} className="popover-check" />}
                             </button>
                             <button className="popover-item" onClick={() => setShowAttachmentMenu(false)}>
                               <PenTool size={16} />

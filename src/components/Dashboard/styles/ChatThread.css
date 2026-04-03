@@ -13,7 +13,7 @@
 .chat-thread::-webkit-scrollbar { width: 6px; }
 .chat-thread::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
 
-.message-row { display: flex; align-items: flex-start; gap: 20px; padding: 0.1rem 2rem; width: 100%; max-width: 768px; margin: 0 auto; overflow: visible; }
+.message-row { display: flex; align-items: flex-start; gap: 24px; padding: 1.25rem 0; width: 100%; max-width: 840px; margin: 0 auto; overflow: visible; }
 .message-row.user { justify-content: flex-end; padding-right: 2rem; }
 
 .message-row .message-action-bar { transition: opacity 0.2s; }
@@ -34,6 +34,13 @@
 
 .assistant-container {
   align-items: flex-start;
+}
+
+.assistant-container .message-body {
+  width: 648px;
+  max-width: 648px;
+  flex-shrink: 0;
+  margin-left: 0;
 }
 
 .message-row.user .message-body { 
@@ -132,7 +139,7 @@
   66% { transform: translate(-14px, 8px); }
 }
 
-.message-body { max-width: 80%; min-width: 0; font-size: 1rem; line-height: 1.6; overflow: visible; }
+.message-body { min-width: 0; font-size: 1rem; line-height: 1.58; overflow: visible; }
 
 .message-text { white-space: pre-wrap; color: var(--claude-text-main); overflow: visible; }
 .error-text { color: #fb7185; }
@@ -145,9 +152,18 @@
 .think-content { padding: 12px; font-size: 0.9rem; color: var(--claude-text-muted); border-top: 1px solid var(--claude-border); }
 
 .markdown-body { font-size: 1rem; line-height: 1.6; white-space: normal !important; overflow: visible !important; }
-.markdown-body p { margin-bottom: 0.6em; margin-top: 0; }
+.markdown-body p { margin-bottom: 1.2em; margin-top: 0; }
 .markdown-body > *:last-child { margin-bottom: 0 !important; }
 .markdown-body hr { display: none !important; }
+.markdown-body a { 
+  color: rgba(255, 255, 255, 0.5); 
+  text-decoration: none; 
+  transition: color 0.2s;
+}
+.markdown-body a:hover { 
+  color: #FF6A00; 
+  text-decoration: underline; 
+}
 
 .code-block-wrapper { background: var(--claude-bg-sidebar); border: 1px solid var(--claude-border); border-radius: 8px; display: block; position: relative; margin-bottom: 16px; margin-top: 8px; }
 .code-block-lang { padding: 8px 16px 2px 16px; border-bottom: 1px solid var(--claude-border); }

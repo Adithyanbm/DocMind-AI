@@ -80,6 +80,20 @@
   color: #d4d0cc;
 }
 
+.popover-item.active {
+  color: #4da3ff;
+}
+
+.popover-item.active svg {
+  color: #4da3ff;
+}
+
+.popover-item .popover-check {
+  margin-left: auto;
+  color: #4da3ff;
+  opacity: 1;
+}
+
 .popover-item .shortcut {
   margin-left: auto;
   font-size: 0.75rem;

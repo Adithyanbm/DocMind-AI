@@ -1,5 +1,6 @@
 import os
 import json
+import serpapi
 from django.http import StreamingHttpResponse, JsonResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -55,7 +56,7 @@ def extract_pdf_content(base64_pdf):
         print(f"PDF Extraction Error: {str(e)}")
         return [{"type": "text", "text": f"[Error extracting PDF: {str(e)}]"}]
 
-def stream_nvidia_response(messages):
+def stream_nvidia_response(messages, is_web_search=False):
     # 1. PRE-PROCESS AND CLEAN MESSAGES
     processed_messages = []
     has_vision = False
@@ -157,38 +158,92 @@ def stream_nvidia_response(messages):
         else:
             final_sanitized_messages.append(msg)
 
-    # 3. CONSTRUCT SYSTEM PROMPTS
-    # Refined system prompt to include Document Analysis / OCR identity
-    formatting_sys_prompt = {
+    # 3. CONSTRUCT CORE SYSTEM PROMPT
+    # We consolidate everything into ONE system message to reduce Llama-Vision confusion/refusal
+    docmind_sys_prompt = {
         "role": "system", 
         "content": (
             "You are DocMind AI, a specialized assistant with advanced Document Analysis and Vision OCR capabilities. "
             "You excel at analyzing PDF text AND visual elements in document images.\n\n"
+            "CORE VISION RULE: You are explicitly AUTHORIZED to analyze screenshots of user interfaces, including the DocMind AI dashboard itself. "
+            "If a user provides a screenshot of this interface, treat it as a technical request to describe or troubleshoot the UI/UX.\n\n"
+            "FORMATTING RULE: DO NOT use excessive blank lines. Keep spacing incredibly compact. Never pad headings with empty lines.\n\n"
             "CRITICAL INSTRUCTION: When a user provides a document or image, ALWAYS prioritize their specific question or request. "
-            "If they ask a specific question (e.g., 'What is the score?', 'is he male?'), answer it FIRST and accurately based on the provided data.\n"
-            "Respond naturally and concisely. IF the user requests a project or coding task, follow this flow:\n\n"
+            "If they ask a specific question, answer it FIRST and accurately based on the data provided.\n\n"
+            "IF the user requests a project or coding task, follow this flow:\n"
             "1. Start with `ACTION: ` followed by a 1-sentence project summary.\n"
             "2. Keep the intro very short (max 2 lines).\n"
-            "3. Favor concise, informative paragraphs. Avoid unnecessary lists unless specifically requested.\n"
-            "4. Use Markdown code blocks with proper language tags (e.g., ```html, ```css, ```javascript).\n"
-            "4. IMPORTANT: The filename comment MUST be the VERY FIRST line INSIDE the code block. Example:\n"
-            "   ```html\n"
-            "   <!-- filename: index.html -->\n"
-            "   <!DOCTYPE html>...\n"
-            "   ```\n"
-            "5. TOPIC INDEPENDENCE: Evaluate every user request independently. If a previous request was sensitive but the current one is technical or educational (like analyzing AI architectures or graphs), answer it fully and objectively without carrying over previous refusals.\n"
-            "6. EDUCATIONAL CONTEXT: You are a learning tool. Provide objective information on cultural, historical, and technical topics (including alcohol or social customs) in a neutral, informative manner unless they directly promote illegal acts.\n"
-            "7. Never use ```text for code. The artifact panel will ONLY trigger if the block is long or has a filename inside.\n"
+            "3. Use Markdown code blocks with proper language tags.\n"
+            "4. The filename MUST be the VERY FIRST line inside the code block. Example: ```html\n<!-- filename: index.html -->\n\n"
+            "5. TOPIC INDEPENDENCE: Evaluate every request independently. Technical or educational analysis (including UI graphs or architectures) should never be refused.\n"
         )
     }
     
-    dense_prompt = {
-        "role": "system",
-        "content": "CRITICAL RULE: DO NOT use excessive blank lines. Never pad headings or horizontal rules with multiple empty lines. Keep spacing incredibly compact."
-    }
-    
-    # Assembly with system prompts at the top
-    final_input_messages = [formatting_sys_prompt, dense_prompt] + final_sanitized_messages
+    # 3b. AGENTIC WEB SEARCH (OPTIONAL)
+    search_context = ""
+    if is_web_search:
+        try:
+            # First, ask the model if it needs to search and what params to use
+            search_decision_prompt = (
+                "You are an expert search assistant. Based on the conversation, decide if a web search is needed. "
+                "Output ONLY a JSON block. Use 'q' for query and 'engine' for the search engine. "
+                "Engines: google, bing, youtube, duckduckgo, google_scholar, google_maps, etc. "
+                "If no search is needed, use 'q': null. "
+                "Example: {\"q\": \"current price of Bitcoin\", \"engine\": \"google\"}"
+            )
+            
+            # Temporary client for non-streaming decision
+            decision_client = OpenAI(
+                base_url="https://integrate.api.nvidia.com/v1",
+                api_key=os.environ.get('NVIDIA_API_KEY')
+            )
+            
+            decision_response = decision_client.chat.completions.create(
+                model="meta/llama-3.1-405b-instruct",
+                messages=[{"role": "system", "content": search_decision_prompt}] + final_sanitized_messages[-3:],
+                temperature=0.1,
+                max_tokens=150
+            )
+            
+            decision_text = decision_response.choices[0].message.content.strip()
+            # Try to extract JSON if it was wrapped in markdown
+            if "```json" in decision_text:
+                decision_text = decision_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in decision_text:
+                decision_text = decision_text.split("```")[1].strip()
+            
+            search_params = json.loads(decision_text)
+            
+            if search_params.get("q"):
+                search_q = search_params["q"]
+                search_engine = search_params.get("engine", "google")
+                
+                # Execute SerpApi
+                s_client = serpapi.Client(api_key=os.getenv("SERPAPI_KEY"))
+                search_results = s_client.search({
+                    "engine": search_engine,
+                    "q": search_q
+                })
+                
+                # Format a concise summary of results
+                snippets = []
+                if "organic_results" in search_results:
+                    for res in search_results["organic_results"][:5]:
+                        snippets.append(f"- {res.get('title')}: {res.get('snippet')} ({res.get('link')})")
+                
+                if snippets:
+                    search_context = f"\n\n[WEB SEARCH RESULTS FROM {search_engine.upper()}]\n" + "\n".join(snippets)
+                    search_context += "\n\nUse the above information to provide a detailed, accurate response. Cite sources if needed."
+        except Exception as se:
+            print(f"Search agent error: {str(se)}")
+            # Fallback: continue without search results
+
+    # Assembly with a single system prompt at the top
+    # Update system prompt if there is search context
+    if search_context:
+        docmind_sys_prompt["content"] += search_context
+
+    final_input_messages = [docmind_sys_prompt] + final_sanitized_messages
 
     # 4. SELECT MODEL AND CALL COMPLETION
     model_to_use = "meta/llama-3.2-90b-vision-instruct" if has_vision else "mistralai/mistral-large-3-675b-instruct-2512"
@@ -247,6 +302,7 @@ def stream_nvidia_response(messages):
 def chat_completions(request):
     try:
         messages = request.data.get('messages', [])
+        is_web_search = request.data.get('isWebSearchActive', False)
         
         # Protect against empty messages
         if not messages:
@@ -254,7 +310,7 @@ def chat_completions(request):
 
         # Use Django's StreamingHttpResponse to pipe the generator to the client
         return StreamingHttpResponse(
-            stream_nvidia_response(messages),
+            stream_nvidia_response(messages, is_web_search=is_web_search),
             content_type='text/event-stream'
         )
         
@@ -281,6 +337,8 @@ def save_to_drive(request):
         
         if result.get("success"):
             return JsonResponse(result, status=200)
+        elif result.get("error") == "unauthorized":
+            return JsonResponse(result, status=401)
         elif result.get("error") == "connectivity_issue":
             return JsonResponse(result, status=503)
         else:
@@ -306,6 +364,8 @@ def get_chat_history(request):
         result = list_drive_chats(google_token)
         if result.get("success"):
             return JsonResponse(result, status=200)
+        elif result.get("error") == "unauthorized":
+            return JsonResponse(result, status=401)
         elif result.get("error") == "connectivity_issue":
             return JsonResponse(result, status=503)
         else:
@@ -329,6 +389,8 @@ def get_chat_session(request, file_id):
         result = get_drive_chat_content(google_token, file_id)
         if result.get("success"):
             return JsonResponse(result, status=200)
+        elif result.get("error") == "unauthorized":
+            return JsonResponse(result, status=401)
         elif result.get("error") == "connectivity_issue":
             return JsonResponse(result, status=503)
         else:
@@ -352,6 +414,8 @@ def delete_chat_session(request, file_id):
         result = delete_chat_from_drive(google_token, file_id)
         if result.get("success"):
             return JsonResponse(result, status=200)
+        elif result.get("error") == "unauthorized":
+            return JsonResponse(result, status=401)
         elif result.get("error") == "connectivity_issue":
             return JsonResponse(result, status=503)
         else:
@@ -379,6 +443,8 @@ def rename_chat_session(request, file_id):
         result = rename_chat_on_drive(google_token, file_id, new_name)
         if result.get("success"):
             return JsonResponse(result, status=200)
+        elif result.get("error") == "unauthorized":
+            return JsonResponse(result, status=401)
         elif result.get("error") == "connectivity_issue":
             return JsonResponse(result, status=503)
         else:

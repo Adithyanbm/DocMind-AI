@@ -154,9 +154,13 @@ def upload_chat_to_drive(access_token, messages, file_id=None):
             ).execute()
             return {"success": True, "file_id": file.get("id"), "name": file.get("name")}
             
-    except (exceptions.RefreshError, ConnectionError) as net_err:
-        # Gracefully handle network or auth-refresh failures without a noisy traceback
-        print(f"Network/Auth issue during Drive upload (likely offline): {str(net_err)}")
+    except exceptions.RefreshError as auth_err:
+        # Token is expired and cannot be refreshed (Credential issue)
+        print(f"Google Auth Token expired/invalid: {str(auth_err)}")
+        return {"success": False, "error": "unauthorized", "details": str(auth_err)}
+    except (ConnectionError, TimeoutError) as net_err:
+        # Actual network connectivity issue
+        print(f"Network issue during Drive upload: {str(net_err)}")
         return {"success": False, "error": "connectivity_issue", "details": str(net_err)}
     except Exception as e:
         import traceback
@@ -177,8 +181,10 @@ def list_drive_chats(access_token):
             "success": True,
             "files": items
         }
-    except (exceptions.RefreshError, ConnectionError) as net_err:
-        print(f"Network/Auth issue during Drive list: {str(net_err)}")
+    except exceptions.RefreshError as auth_err:
+        return {"success": False, "error": "unauthorized", "details": str(auth_err)}
+    except (ConnectionError, TimeoutError) as net_err:
+        print(f"Network issue during Drive list: {str(net_err)}")
         return {"success": False, "error": "connectivity_issue", "details": str(net_err)}
     except Exception as e:
         import traceback
@@ -201,8 +207,10 @@ def get_drive_chat_content(access_token, file_id):
             "success": True,
             "content": text_content
         }
-    except (exceptions.RefreshError, ConnectionError) as net_err:
-        print(f"Network/Auth issue during Drive content fetch: {str(net_err)}")
+    except exceptions.RefreshError as auth_err:
+        return {"success": False, "error": "unauthorized", "details": str(auth_err)}
+    except (ConnectionError, TimeoutError) as net_err:
+        print(f"Network issue during Drive content fetch: {str(net_err)}")
         return {"success": False, "error": "connectivity_issue", "details": str(net_err)}
     except Exception as e:
         import traceback
@@ -220,8 +228,10 @@ def delete_chat_from_drive(access_token, file_id):
         service = get_drive_service(access_token)
         service.files().update(fileId=file_id, body={'trashed': True}).execute()
         return {"success": True}
-    except (exceptions.RefreshError, ConnectionError) as net_err:
-        print(f"Network/Auth issue during Drive delete: {str(net_err)}")
+    except exceptions.RefreshError as auth_err:
+        return {"success": False, "error": "unauthorized", "details": str(auth_err)}
+    except (ConnectionError, TimeoutError) as net_err:
+        print(f"Network issue during Drive delete: {str(net_err)}")
         return {"success": False, "error": "connectivity_issue", "details": str(net_err)}
     except Exception as e:
         import traceback
@@ -242,8 +252,10 @@ def rename_chat_on_drive(access_token, file_id, new_name):
             
         updated_file = service.files().update(fileId=file_id, body={'name': new_name}).execute()
         return {"success": True, "name": updated_file.get("name")}
-    except (exceptions.RefreshError, ConnectionError) as net_err:
-        print(f"Network/Auth issue during Drive rename: {str(net_err)}")
+    except exceptions.RefreshError as auth_err:
+        return {"success": False, "error": "unauthorized", "details": str(auth_err)}
+    except (ConnectionError, TimeoutError) as net_err:
+        print(f"Network issue during Drive rename: {str(net_err)}")
         return {"success": False, "error": "connectivity_issue", "details": str(net_err)}
     except Exception as e:
         import traceback

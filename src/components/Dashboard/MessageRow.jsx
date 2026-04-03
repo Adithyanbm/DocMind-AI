@@ -96,6 +96,7 @@ const markdownComponents = {
   h4: ({ node, ...props }) => <h4 style={{ margin: '1.2em 0 0.5em 0', fontSize: '1.1em', fontWeight: '600' }} {...props} />,
   pre: ({ node, ...props }) => <div className="markdown-pre" style={{ margin: 0, padding: 0 }} {...props} />,
   code: (props) => <CodeBlock {...props} />,
+  a: ({ node, ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />,
 };
 
 export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg, isLatest }) => {

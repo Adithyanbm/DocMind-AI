@@ -1,6 +1,8 @@
 /* src/components/Dashboard/styles/Sidebar.css */
 .claude-sidebar {
-  width: 260px;
+  width: 288px;
+  min-width: 288px;
+  max-width: 288px;
   background-color: var(--claude-bg-sidebar);
   border-right: 1px solid var(--claude-border);
   display: flex;

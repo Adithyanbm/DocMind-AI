@@ -40,7 +40,7 @@ export const deleteHistory = async (fileId, googleToken) => {
   }
 };
 
-export const getChatCompletions = async (messages, signal) => {
+export const getChatCompletions = async (messages, signal, isWebSearchActive = false) => {
   let token = localStorage.getItem('access');
   
   const makeRequest = async (authToken) => {
@@ -50,7 +50,10 @@ export const getChatCompletions = async (messages, signal) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`
       },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({ 
+        messages,
+        isWebSearchActive 
+      }),
       signal
     });
   };
