@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, ArrowRight, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useGoogleLogin } from '@react-oauth/google';
@@ -11,7 +11,14 @@ const SignUp = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { register, loginWithGoogle } = useAuth();
+  const { user, register, loginWithGoogle } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user && user.authenticated) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
 
   const loginWithGoogleFlow = useGoogleLogin({
     onSuccess: async (tokenResponse) => {

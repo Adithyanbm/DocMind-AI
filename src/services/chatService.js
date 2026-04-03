@@ -41,17 +41,47 @@ export const deleteHistory = async (fileId, googleToken) => {
 };
 
 export const getChatCompletions = async (messages, signal) => {
-  // We use fetch directly here because of streaming support which is easier with native fetch
-  const token = localStorage.getItem('access');
-  return fetch('http://localhost:8000/api/chat/completions/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({ messages }),
-    signal
-  });
+  let token = localStorage.getItem('access');
+  
+  const makeRequest = async (authToken) => {
+    return fetch('http://localhost:8000/api/chat/completions/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ messages }),
+      signal
+    });
+  };
+
+  let response = await makeRequest(token);
+
+  // Handle 401 Unauthorized (Token expired)
+  if (response.status === 401) {
+    try {
+      const refreshToken = localStorage.getItem('refresh');
+      if (!refreshToken) throw new Error('No refresh token');
+
+      // Attempt to refresh the access token
+      const refreshResponse = await api.post('/auth/refresh/', { refresh: refreshToken });
+      const { access } = refreshResponse.data;
+      
+      localStorage.setItem('access', access);
+      
+      // Retry with the new token
+      response = await makeRequest(access);
+    } catch (error) {
+      console.error('Token refresh failed during streaming:', error);
+      // Optional: Clear tokens and redirect to login if refresh also fails
+      // localStorage.removeItem('access');
+      // localStorage.removeItem('refresh');
+      // window.location.href = '/signin';
+      return response; // Return the 401 if refresh failed
+    }
+  }
+
+  return response;
 };
 
 export const renameChat = async (fileId, newName, googleToken) => {

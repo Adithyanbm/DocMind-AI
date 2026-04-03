@@ -121,7 +121,12 @@ def upload_chat_to_drive(access_token, messages, file_id=None):
                 ver_b64 = base64.b64encode(ver_json.encode('utf-8')).decode('utf-8')
                 versions_meta = f"<!-- VERSIONS: {ver_b64} -->"
             
-            formatted_content += f"**{role_marker}:**\n{ts_meta}\n{versions_meta}\n{content_str}\n\n"
+            # Save active version index
+            active_version_meta = ""
+            if "activeVersionIndex" in msg:
+                active_version_meta = f"<!-- ACTIVE_VERSION: {msg['activeVersionIndex']} -->"
+            
+            formatted_content += f"**{role_marker}:**\n{ts_meta}\n{versions_meta}\n{active_version_meta}\n{content_str}\n\n"
             
         file_content = io.BytesIO(formatted_content.encode('utf-8'))
         

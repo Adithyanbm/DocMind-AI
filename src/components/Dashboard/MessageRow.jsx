@@ -323,27 +323,18 @@ export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg,
 
         {msg.role === 'user' && !isThisStreamingMsg && !isEditing && (
           <div className="user-action-bar">
-            {totalVersions > 1 && (
-              <div className="version-navigator">
-                <button className="version-nav-btn" onClick={onPrevVersion} disabled={msg.activeVersionIndex === 0}>
-                  <ChevronLeft size={14} />
-                </button>
-                <span className="version-text">{currentVersion} / {totalVersions}</span>
-                <button className="version-nav-btn" onClick={onNextVersion} disabled={msg.activeVersionIndex === totalVersions - 1}>
-                  <ChevronRight size={14} />
-                </button>
-              </div>
+            {msg.timestamp && (
+              <span className="user-msg-date" title={new Date(msg.timestamp).toLocaleString('en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}>
+                {(() => {
+                  const d = new Date(msg.timestamp);
+                  const now = new Date();
+                  const isToday = d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+                  return isToday 
+                    ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
+                    : d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }).toLowerCase();
+                })()}
+              </span>
             )}
-            <span className="user-msg-date" title={msg.timestamp ? new Date(msg.timestamp).toLocaleString('en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : ''}>
-              {msg.timestamp ? (() => {
-                const d = new Date(msg.timestamp);
-                const now = new Date();
-                const isToday = d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-                return isToday 
-                  ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
-                  : d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }).toLowerCase();
-              })() : ''}
-            </span>
             <button className="icon-btn" onClick={() => window.dashboardHandleRetry && window.dashboardHandleRetry(msgIdx)} title="Retry">
               <RotateCcw size={14} />
             </button>
@@ -353,6 +344,17 @@ export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg,
             <button className="icon-btn" onClick={() => { navigator.clipboard.writeText(msg.content); setUserCopied(true); setTimeout(() => setUserCopied(false), 2000); }} title="Copy">
               {userCopied ? <Check size={14} color="var(--claude-accent)" /> : <Copy size={14} />}
             </button>
+            {totalVersions > 1 && (
+              <div className="version-navigator" style={{ marginLeft: '4px' }}>
+                <button className="version-nav-btn" onClick={onPrevVersion} disabled={msg.activeVersionIndex === 0}>
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="version-text">{currentVersion} / {totalVersions}</span>
+                <button className="version-nav-btn" onClick={onNextVersion} disabled={msg.activeVersionIndex === totalVersions - 1}>
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

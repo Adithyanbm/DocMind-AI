@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import {
-  Bot, Menu, Plus, Search, MessageSquare, Settings, ArrowUp, X, HardDrive,
+  Bot, Menu, Plus, Search, MessageSquare, Settings, ArrowUp, X, HardDrive, AlertTriangle,
   ChevronDown, ChevronRight, Sparkles, Paperclip, Camera, FolderPlus, Book, Blocks, Globe, PenTool,
   Mic, MicOff, Star, Pencil, Trash2, Layers, Compass, MessageCircle, GraduationCap, Heart, Lightbulb
 } from 'lucide-react';
@@ -87,6 +87,8 @@ const Dashboard = () => {
 
   const [autoScroll, setAutoScroll] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [showNetworkError, setShowNetworkError] = useState(false);
 
   const [recentChats, setRecentChats] = useState([]);
   const [currentFileId, setCurrentFileId] = useState(null);
@@ -117,8 +119,34 @@ const Dashboard = () => {
   }, [colorMode]);
 
   useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (localStorage.getItem('google_access_token')) {
+      fetchRecentChats();
+    }
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem('docmind_chatFont', chatFont);
   }, [chatFont]);
+
+  useEffect(() => {
+    if (showNetworkError) {
+      const timer = setTimeout(() => {
+        setShowNetworkError(false);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [showNetworkError]);
 
   useEffect(() => {
     localStorage.setItem('docmind_bgAnim', backgroundAnimation);
@@ -254,14 +282,22 @@ const Dashboard = () => {
             const verMatch = content.match(/<!-- VERSIONS: (.*?) -->/);
             if (verMatch) {
               try {
-                const b64 = verMatch[1];
+                const b64 = verMatch[verMatch.length - 1]; // Use last match if many
                 const jsonStr = atob(b64);
                 versions = JSON.parse(jsonStr);
-                activeVersionIndex = versions.length - 1;
                 content = content.replace(verMatch[0], '').trim();
               } catch (e) {
                 console.error("Failed to parse versions metadata", e);
               }
+            }
+            
+            const activeVerMatch = content.match(/<!-- ACTIVE_VERSION: (\d+) -->/);
+            if (activeVerMatch) {
+              activeVersionIndex = parseInt(activeVerMatch[activeVerMatch.length - 1], 10);
+              content = content.replace(activeVerMatch[0], '').trim();
+            } else if (versions) {
+              // Fallback for older files or if something went wrong
+              activeVersionIndex = versions.length - 1;
             }
 
             // 1. Check for Image Attachments
@@ -312,7 +348,7 @@ const Dashboard = () => {
               }
             }
 
-            parsedMessages.push({ 
+            const msgObj = { 
               role, 
               content, 
               apiContent, 
@@ -321,7 +357,21 @@ const Dashboard = () => {
               timestamp,
               versions,
               activeVersionIndex
-            });
+            };
+
+            // If we have versions, the LAST one is the current active one from the save
+            if (versions && versions[activeVersionIndex]) {
+              const active = versions[activeVersionIndex];
+              msgObj.content = active.content;
+              msgObj.apiContent = active.apiContent;
+              if (active.attachment) msgObj.attachment = active.attachment;
+              if (active.attachmentType) msgObj.attachmentType = active.attachmentType;
+              if (active.attachmentData) msgObj.attachmentData = active.attachmentData;
+              if (active.attachmentNumPages) msgObj.attachmentNumPages = active.attachmentNumPages;
+              if (active.attachmentBase64) msgObj.attachmentBase64 = active.attachmentBase64;
+            }
+
+            parsedMessages.push(msgObj);
           }
         }
 
@@ -562,18 +612,48 @@ const Dashboard = () => {
       const targetIdx = options.editIndex;
       const oldMsg = messages[targetIdx];
       
+      // Reconstruct apiContent with attachment if present
+      let apiContent = options.editContent;
+      if (oldMsg.attachmentData && oldMsg.attachmentType && oldMsg.attachmentType.startsWith('image/')) {
+        apiContent = [
+          { type: "text", text: options.editContent || "Analyze this image." },
+          { type: "image_url", image_url: { url: oldMsg.attachmentData } }
+        ];
+      } else if (oldMsg.attachmentBase64 && oldMsg.attachmentType === 'application/pdf') {
+        apiContent = [
+          { type: "text", text: options.editContent || "Analyze this PDF." },
+          { type: "file", file_url: { url: `data:${oldMsg.attachmentType};base64,${oldMsg.attachmentBase64}`, name: oldMsg.attachment } }
+        ];
+      }
+
       // Update history/versions
+      // CAPTURE ALL MESSAGES after the edited one as the context for the OLD branch
+      const downstreamMessages = messages.slice(targetIdx + 1);
+
       const newVersion = { 
         content: options.editContent, 
-        apiContent: options.editContent, // Simplify for now
-        timestamp: new Date().toISOString() 
+        apiContent, 
+        timestamp: new Date().toISOString(),
+        followingMessages: [], // New branch starts empty
+        // PRESERVE ATTACHMENTS
+        attachment: oldMsg.attachment,
+        attachmentType: oldMsg.attachmentType,
+        attachmentData: oldMsg.attachmentData,
+        attachmentNumPages: oldMsg.attachmentNumPages,
+        attachmentBase64: oldMsg.attachmentBase64
       };
       
       const versions = oldMsg.versions || [{ 
         content: oldMsg.content, 
         apiContent: oldMsg.apiContent, 
-        assistantResponse: messages[targetIdx + 1],
-        timestamp: oldMsg.timestamp 
+        followingMessages: downstreamMessages, // Capture the current "future" for the original version
+        timestamp: oldMsg.timestamp,
+        // PRESERVE ATTACHMENTS
+        attachment: oldMsg.attachment,
+        attachmentType: oldMsg.attachmentType,
+        attachmentData: oldMsg.attachmentData,
+        attachmentNumPages: oldMsg.attachmentNumPages,
+        attachmentBase64: oldMsg.attachmentBase64
       }];
       
       const updatedVersions = [...versions, newVersion];
@@ -581,7 +661,7 @@ const Dashboard = () => {
       displayUserMessage = { 
         ...oldMsg, 
         content: options.editContent, 
-        apiContent: options.editContent,
+        apiContent,
         versions: updatedVersions,
         activeVersionIndex: updatedVersions.length - 1,
         timestamp: new Date().toISOString()
@@ -672,6 +752,12 @@ const Dashboard = () => {
     const streamTrackerId = Date.now().toString();
     let startingFileId = currentFileIdRef.current;
 
+    if (!navigator.onLine) {
+      setShowNetworkError(true);
+      setIsStreaming(false);
+      return;
+    }
+
     try {
       setMessages([...messagesToMap, { role: 'assistant', content: '', reasoning_content: '' }]);
       abortControllerRef.current = new AbortController();
@@ -679,7 +765,18 @@ const Dashboard = () => {
 
       if (!startingFileId) startingFileId = await autoSaveToDrive([...messagesToMap], undefined, streamTrackerId);
 
-      const response = await chatService.getChatCompletions(apiMessages, abortControllerRef.current.signal);
+      let response;
+      try {
+        response = await chatService.getChatCompletions(apiMessages, abortControllerRef.current.signal);
+      } catch (fErr) {
+        if (fErr.name === 'AbortError') return;
+        console.error("Fetch error detected", fErr);
+        setShowNetworkError(true);
+        setIsStreaming(false);
+        // Remove the empty assistant message since it failed
+        setMessages(messagesToMap);
+        return;
+      }
 
       if (!response.ok) throw new Error('Failed to fetch response');
       const reader = response.body.getReader();
@@ -764,7 +861,13 @@ const Dashboard = () => {
           if (newMsgs[i].role === 'user' && newMsgs[i].versions) {
             const activeIdx = newMsgs[i].activeVersionIndex ?? 0;
             if (newMsgs[i].versions[activeIdx]) {
-              newMsgs[i].versions[activeIdx].assistantResponse = assistantMsg;
+              // Ensure we don't duplicate if it was already an array
+              const currentFollowing = newMsgs[i].versions[activeIdx].followingMessages || [];
+              const alreadyHasAssistant = currentFollowing.some(m => m.role === 'assistant' && m.content === assistantContent);
+              
+              if (!alreadyHasAssistant) {
+                newMsgs[i].versions[activeIdx].followingMessages = [assistantMsg];
+              }
             }
             break;
           }
@@ -772,7 +875,20 @@ const Dashboard = () => {
         return newMsgs;
       });
 
-      autoSaveToDrive([...messagesToMap, assistantMsg], startingFileId, streamTrackerId);
+      // Find and update the corresponding version in our to-save array
+      const finalMessagesToSave = messagesToMap.map(m => {
+        if (m === displayUserMessage) {
+          const updatedVer = [...(m.versions || [])];
+          const activeIdx = m.activeVersionIndex ?? (updatedVer.length - 1);
+          if (updatedVer[activeIdx]) {
+            updatedVer[activeIdx] = { ...updatedVer[activeIdx], followingMessages: [assistantMsg] };
+          }
+          return { ...m, versions: updatedVer };
+        }
+        return m;
+      });
+
+      autoSaveToDrive([...finalMessagesToSave, assistantMsg], startingFileId, streamTrackerId);
 
       if (activeStreamIdRef.current === streamTrackerId && speechBuffer.trim() && !abortControllerRef.current?.signal.aborted) {
         if (lastInputWasVoiceRef.current) speakChunk(speechBuffer);
@@ -797,22 +913,42 @@ const Dashboard = () => {
   };
 
   const handleVersionSwitch = (msgIdx, versionIdx) => {
-    const newMessages = [...messages];
-    const msgTurn = newMessages[msgIdx];
-    if (!msgTurn.versions || !msgTurn.versions[versionIdx]) return;
+    setMessages(prev => {
+      const newMessages = [...prev];
+      const msgTurn = { ...newMessages[msgIdx] };
+      if (!msgTurn.versions || !msgTurn.versions[versionIdx]) return prev;
 
-    msgTurn.activeVersionIndex = versionIdx;
-    msgTurn.content = msgTurn.versions[versionIdx].content;
-    msgTurn.apiContent = msgTurn.versions[versionIdx].apiContent;
+      const activeVer = msgTurn.versions[versionIdx];
+      const oldActiveIdx = msgTurn.activeVersionIndex ?? 0;
 
-    // When switching a user message version, we must also switch the assistant response that follows it
-    const updatedMessages = newMessages.slice(0, msgIdx + 1);
-    const associatedAI = msgTurn.versions[versionIdx].assistantResponse;
-    if (associatedAI) {
-      updatedMessages.push(associatedAI);
-    }
-    
-    setMessages(updatedMessages);
+      // 1. SAVE the current "following" messages into the old version
+      const currentDownstream = newMessages.slice(msgIdx + 1);
+      msgTurn.versions[oldActiveIdx].followingMessages = currentDownstream;
+
+      // 2. LOAD the new version's properties
+      msgTurn.activeVersionIndex = versionIdx;
+      msgTurn.content = activeVer.content;
+      msgTurn.apiContent = activeVer.apiContent;
+      
+      // RESTORE ATTACHMENTS
+      msgTurn.attachment = activeVer.attachment;
+      msgTurn.attachmentType = activeVer.attachmentType;
+      msgTurn.attachmentData = activeVer.attachmentData;
+      msgTurn.attachmentNumPages = activeVer.attachmentNumPages;
+      msgTurn.attachmentBase64 = activeVer.attachmentBase64;
+
+      // 3. RECONSTRUCT full branch
+      const updatedMessages = newMessages.slice(0, msgIdx);
+      updatedMessages.push(msgTurn);
+      
+      const following = activeVer.followingMessages || [];
+      updatedMessages.push(...following);
+      
+      // AUTO-SAVE on version switch
+      autoSaveToDrive(updatedMessages, currentFileId);
+      
+      return updatedMessages;
+    });
   };
 
   useEffect(() => { 
@@ -924,6 +1060,18 @@ const Dashboard = () => {
                     </div>
                   </>
                 )}
+              </div>
+            )}
+
+            {showNetworkError && (
+              <div className="network-error-toast show">
+                <div className="toast-left">
+                  <AlertTriangle size={20} className="warning-icon-svg" />
+                  <span className="toast-message">We couldn’t connect to DocMind. Please check your network connection and try again.</span>
+                </div>
+                <button className="toast-close" onClick={() => setShowNetworkError(false)}>
+                  <X size={18} />
+                </button>
               </div>
             )}
 
