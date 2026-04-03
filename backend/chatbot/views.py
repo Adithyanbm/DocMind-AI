@@ -5,6 +5,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from openai import OpenAI
 from .drive_service import upload_chat_to_drive, list_drive_chats, get_drive_chat_content, delete_chat_from_drive, rename_chat_on_drive
+from google.auth import exceptions
 
 NVIDIA_API_KEY = os.environ.get('NVIDIA_API_KEY')
 
@@ -280,13 +281,15 @@ def save_to_drive(request):
         
         if result.get("success"):
             return JsonResponse(result, status=200)
+        elif result.get("error") == "connectivity_issue":
+            return JsonResponse(result, status=503)
         else:
             return JsonResponse(result, status=500)
             
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -303,6 +306,8 @@ def get_chat_history(request):
         result = list_drive_chats(google_token)
         if result.get("success"):
             return JsonResponse(result, status=200)
+        elif result.get("error") == "connectivity_issue":
+            return JsonResponse(result, status=503)
         else:
             return JsonResponse(result, status=500)
     except Exception as e:
@@ -324,6 +329,8 @@ def get_chat_session(request, file_id):
         result = get_drive_chat_content(google_token, file_id)
         if result.get("success"):
             return JsonResponse(result, status=200)
+        elif result.get("error") == "connectivity_issue":
+            return JsonResponse(result, status=503)
         else:
             return JsonResponse(result, status=500)
     except Exception as e:
@@ -345,6 +352,8 @@ def delete_chat_session(request, file_id):
         result = delete_chat_from_drive(google_token, file_id)
         if result.get("success"):
             return JsonResponse(result, status=200)
+        elif result.get("error") == "connectivity_issue":
+            return JsonResponse(result, status=503)
         else:
             return JsonResponse(result, status=500)
     except Exception as e:
@@ -370,6 +379,8 @@ def rename_chat_session(request, file_id):
         result = rename_chat_on_drive(google_token, file_id, new_name)
         if result.get("success"):
             return JsonResponse(result, status=200)
+        elif result.get("error") == "connectivity_issue":
+            return JsonResponse(result, status=503)
         else:
             return JsonResponse(result, status=500)
     except Exception as e:

@@ -407,7 +407,7 @@ const Dashboard = () => {
   const autoSaveToDrive = async (msgsToSave, overrideFileId = undefined, trackerId = null) => {
     try {
       const googleToken = localStorage.getItem('google_access_token');
-      if (!googleToken) return;
+      if (!googleToken || !navigator.onLine) return;
 
       setIsSaving(true);
       const fileIdToUse = overrideFileId !== undefined ? overrideFileId : currentFileIdRef.current;
