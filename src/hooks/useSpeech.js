@@ -38,20 +38,41 @@ export const useSpeech = (input, setInput, isStreaming, handleSubmitRef) => {
     }
 
     manualStopRef.current = false;
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || 
+                              window.webkitSpeechRecognition || 
+                              window.mozSpeechRecognition || 
+                              window.msSpeechRecognition;
+                              
     if (!SpeechRecognition) {
-      alert("Your browser does not natively support Speech Recognition.");
+      const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
+      if (isFirefox) {
+        alert("Speech Recognition is disabled in your Firefox settings. \n\nTo enable it:\n1. Type 'about:config' in your URL bar\n2. Search for 'media.webspeech.recognition.enable'\n3. Set it to 'true'");
+      } else {
+        alert("Your browser does not natively support Speech Recognition. Please try using Chrome or Edge for the best experience.");
+      }
       return;
     }
     
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      console.log("Speech recognition started");
+      setIsListening(true);
+    };
+
+    recognition.onspeechstart = () => {
+      console.log("Speech detected...");
+    };
     
     const originalInput = input.trim();
     let finalTranscript = '';
     
     recognition.onresult = (event) => {
+      console.log("Speech result event received:", event);
       let interimTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
@@ -60,6 +81,7 @@ export const useSpeech = (input, setInput, isStreaming, handleSubmitRef) => {
           interimTranscript += event.results[i][0].transcript;
         }
       }
+      console.log("Transcript updated:", { finalTranscript, interimTranscript });
       const combined = originalInput + (originalInput && (finalTranscript || interimTranscript) ? ' ' : '') + finalTranscript + interimTranscript;
       setInput(combined);
       

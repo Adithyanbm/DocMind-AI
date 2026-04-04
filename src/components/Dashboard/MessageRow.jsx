@@ -99,6 +99,56 @@ const markdownComponents = {
   a: ({ node, ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />,
 };
 
+import { Globe, ChevronDown, CheckCircle2 } from 'lucide-react';
+
+const WebSearchUI = ({ data }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  if (!data || !data.searches || data.searches.length === 0) return null;
+
+  return (
+    <div className="web-search-ui">
+      <div 
+        className="web-search-toggle" 
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <span>Searched the web</span>
+        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      </div>
+
+      {isExpanded && (
+        <div className="web-search-timeline">
+          {data.searches.map((searchInfo, idx) => (
+            <div key={idx} className="search-query-block">
+              <div className="timeline-dot"><Globe size={14} /></div>
+              
+              <div className="search-query-header">
+                <span className="query-text">{searchInfo.query}</span>
+                <span className="results-count">{searchInfo.count} results</span>
+              </div>
+              
+              <div className="search-results-list">
+                {searchInfo.results.map((res, ridx) => (
+                  <a key={ridx} href={res.url} target="_blank" rel="noopener noreferrer" className="search-result-row">
+                    <img src={res.favicon} alt="" className="result-favicon" onError={(e) => { e.target.style.display = 'none'; }} />
+                    <span className="result-title">{res.title}</span>
+                    <span className="result-domain">{res.domain}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          ))}
+          
+          <div className="search-done-block">
+            <div className="timeline-dot done-dot"><CheckCircle2 size={16} /></div>
+            <span className="done-text">Done</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg, isLatest }) => {
   const context = useContext(ArtifactContext);
   const [isEditing, setIsEditing] = useState(false);
@@ -133,7 +183,15 @@ export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg,
     }
   };
 
-  const { artifacts, preText, postText } = useMemo(() => extractArtifacts(msg.content), [msg.content]);
+  const cleanMsgContent = useMemo(() => {
+    let text = msg.content || '';
+    // Strip the raw thought process tags if the LLM hallucinates them
+    text = text.replace(/<previous_thought_process>[\s\S]*?(<\/previous_thought_process>|$)/g, '');
+    text = text.replace(/<search_results_metadata>[\s\S]*?(<\/search_results_metadata>|$)/g, '');
+    return text.trim();
+  }, [msg.content]);
+
+  const { artifacts, preText, postText } = useMemo(() => extractArtifacts(cleanMsgContent), [cleanMsgContent]);
   const nextArtIdxRef = useRef(0);
   nextArtIdxRef.current = 0;
 
@@ -142,7 +200,7 @@ export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg,
   const [feedback, setFeedback] = useState(null);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(msg.content);
+    navigator.clipboard.writeText(cleanMsgContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -151,9 +209,27 @@ export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg,
     context?.setActiveArtifact?.({ msgIdx, artIdx, lang, codeSnapshot: codeSnapshot || '' });
   }, [msgIdx, context]);
 
-  const cleanedContent = useMemo(() => cleanMarkdown(msg.content), [msg.content]);
+  const cleanedContent = useMemo(() => cleanMarkdown(cleanMsgContent), [cleanMsgContent]);
   const cleanedPreText = useMemo(() => cleanMarkdown(preText), [preText]);
   const cleanedPostText = useMemo(() => cleanMarkdown(postText), [postText]);
+
+  const searchPayload = useMemo(() => {
+    if (!msg.reasoning_content) return null;
+    const match = msg.reasoning_content.match(/<docmind_search_ui>([\s\S]*?)<\/docmind_search_ui>/);
+    if (!match) return null;
+    try {
+      return JSON.parse(match[1]);
+    } catch(e) { return null; }
+  }, [msg.reasoning_content]);
+  
+  const cleanReasoning = useMemo(() => {
+    if (!msg.reasoning_content) return null;
+    let text = msg.reasoning_content;
+    // Strip UI and metadata blocks from display, handling partial/streaming states
+    text = text.replace(/<docmind_search_ui>[\s\S]*?(<\/docmind_search_ui>|$)/g, '');
+    text = text.replace(/<search_results_metadata>[\s\S]*?(<\/search_results_metadata>|$)/g, '');
+    return cleanMarkdown(text.trim());
+  }, [msg.reasoning_content]);
 
   const isAttachmentOnly = (msg.attachmentData || msg.attachment) && !(msg.content || msg.reasoning_content || isThisStreamingMsg);
 
@@ -214,12 +290,14 @@ export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg,
         {/* Text/Content Block */}
         {(msg.content || msg.reasoning_content || isThisStreamingMsg) && (
           <div className={`message-body ${isEditing ? 'is-editing' : ''} ${msg.isError ? 'error-text' : ''}`}>
-            {msg.reasoning_content && (
+            {searchPayload && <WebSearchUI data={searchPayload} />}
+
+            {msg.reasoning_content && cleanReasoning.length > 0 && (
               <details className="think-block">
                 <summary>Thought Process</summary>
                 <div className="think-content">
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                    {cleanMarkdown(msg.reasoning_content)}
+                    {cleanReasoning}
                   </ReactMarkdown>
                 </div>
               </details>

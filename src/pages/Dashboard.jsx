@@ -296,6 +296,14 @@ const Dashboard = () => {
               }
             }
             
+            // 0c. Extract reasoning_content if present
+            let reasoning_content = null;
+            const resMatch = content.match(/<reasoning>([\s\S]*?)<\/reasoning>/);
+            if (resMatch) {
+              reasoning_content = resMatch[1].trim();
+              content = content.replace(resMatch[0], '').trim();
+            }
+
             const activeVerMatch = content.match(/<!-- ACTIVE_VERSION: (\d+) -->/);
             if (activeVerMatch) {
               activeVersionIndex = parseInt(activeVerMatch[activeVerMatch.length - 1], 10);
@@ -306,23 +314,41 @@ const Dashboard = () => {
             }
 
             // 1. Check for Image Attachments
-            const imgRegex = new RegExp("!\\[Attached Image\\]\\((data:image/[^;]+;base64,[^)]+)\\)");
+            const imgMetaRegex = /<!-- IMAGE_METADATA: (\{[\s\S]*?\}) -->/;
+            const imgRegex = /!\[(?:Attached Image|Image Preview)\]\((data:image\/[\s\S]*?)\)/;
+            const imgMetaMatch = content.match(imgMetaRegex);
             const imgMatch = content.match(imgRegex);
-            if (role === 'user' && imgMatch) {
-              const base64Url = imgMatch[1];
-              content = content.replace(imgMatch[0], '').trim();
-              attachmentData = base64Url;
-              attachmentType = "image/png"; // Default to png if unknown, will work for previews
-              attachment = "Uploaded Image";
+
+            if (role === 'user' && (imgMatch || imgMetaMatch)) {
+              if (imgMetaMatch) {
+                try {
+                  const meta = JSON.parse(imgMetaMatch[1]);
+                  attachment = meta.name;
+                  attachmentType = meta.type || "image/png";
+                  attachmentBase64 = meta.base64;
+                  content = content.replace(imgMetaMatch[0], '').trim();
+                } catch(e) {}
+              }
+              if (imgMatch) {
+                const base64Url = imgMatch[1];
+                attachmentData = base64Url;
+                content = content.replace(imgMatch[0], '').trim();
+                if (!attachmentBase64) {
+                  attachmentBase64 = base64Url.split(',')[1];
+                }
+              }
+              if (!attachment) attachment = "Uploaded Image";
+              if (!attachmentType) attachmentType = "image/png";
+
               apiContent = [
                 { type: "text", text: content || "Analyze this image." },
-                { type: "image_url", image_url: { url: base64Url } }
+                { type: "image_url", image_url: { url: attachmentData || `data:${attachmentType};base64,${attachmentBase64}` } }
               ];
             }
 
             // 2. Check for PDF Attachments (Metadata + Preview)
-            const pdfMetaRegex = /<!-- PDF_METADATA: (\{.*?\}) -->/;
-            const pdfPreviewRegex = /!\[PDF Preview\]\((data:image\/[^;]+;base64,[^)]+)\)/;
+            const pdfMetaRegex = /<!-- PDF_METADATA: (\{[\s\S]*?\}) -->/;
+            const pdfPreviewRegex = /!\[PDF Preview\]\(([\s\S]*?)\)/;
             const metaMatch = content.match(pdfMetaRegex);
             const previewMatch = content.match(pdfPreviewRegex);
 
@@ -357,8 +383,12 @@ const Dashboard = () => {
               role, 
               content, 
               apiContent, 
+              reasoning_content,
               attachment, 
               attachmentBase64,
+              attachmentType,
+              attachmentData,
+              attachmentNumPages,
               timestamp,
               versions,
               activeVersionIndex
@@ -369,6 +399,7 @@ const Dashboard = () => {
               const active = versions[activeVersionIndex];
               msgObj.content = active.content;
               msgObj.apiContent = active.apiContent;
+              if (active.reasoning_content) msgObj.reasoning_content = active.reasoning_content;
               if (active.attachment) msgObj.attachment = active.attachment;
               if (active.attachmentType) msgObj.attachmentType = active.attachmentType;
               if (active.attachmentData) msgObj.attachmentData = active.attachmentData;
@@ -805,10 +836,19 @@ const Dashboard = () => {
 
     setIsStreaming(true);
 
-    const apiMessages = messagesToMap.map(m => ({
-      role: m.role,
-      content: m.apiContent || m.content
-    }));
+    const apiMessages = messagesToMap.map(msg => {
+      let cleanHistory = msg.reasoning_content || '';
+      // Strip the UI JSON explicitly so the LLM doesn't try to hallucinate/mimic it over time.
+      // The `<search_results_metadata>` will remain intact giving the LLM the text context it needs.
+      cleanHistory = cleanHistory.replace(/<docmind_search_ui>[\s\S]*?<\/docmind_search_ui>/g, '').trim();
+
+      return {
+        role: msg.role === 'user' ? 'user' : 'assistant',
+        content: msg.role === 'assistant' && cleanHistory
+          ? `<previous_thought_process>\n${cleanHistory}\n</previous_thought_process>\n${msg.content}`
+          : (msg.apiContent || msg.content)
+      };
+    });
 
     const streamTrackerId = Date.now().toString();
     let startingFileId = currentFileIdRef.current;
@@ -828,7 +868,8 @@ const Dashboard = () => {
 
       let response;
       try {
-        response = await chatService.getChatCompletions(apiMessages, abortControllerRef.current.signal, webSearchActive);
+        const selectedModel = localStorage.getItem('modelSetting') || 'gemini-3.1-pro';
+        response = await chatService.getChatCompletions(apiMessages, abortControllerRef.current.signal, webSearchActive, selectedModel);
       } catch (fErr) {
         if (fErr.name === 'AbortError') return;
         console.error("Fetch error detected", fErr);

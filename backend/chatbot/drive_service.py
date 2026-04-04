@@ -4,6 +4,7 @@ from googleapiclient.http import MediaIoBaseUpload
 import io
 import datetime
 import json
+import base64
 from google.auth import exceptions
 from google.auth.transport.requests import Request as AuthRequest
 
@@ -95,7 +96,13 @@ def upload_chat_to_drive(access_token, messages, file_id=None):
                 # Handle direct attachments stored at the top level
                 if msg.get("attachmentData") and msg.get("attachmentType"):
                     if msg.get("attachmentType").startswith('image/'):
-                        parts_text.append(f"![Attached Image]({msg.get('attachmentData')})")
+                        img_meta = json.dumps({
+                            "name": msg.get("attachment", "Image"),
+                            "type": msg.get("attachmentType"),
+                            "base64": msg.get("attachmentBase64") or (msg.get("attachmentData", "").split(",")[1] if "," in msg.get("attachmentData", "") else None)
+                        })
+                        parts_text.append(f"![Image Preview]({msg.get('attachmentData')})")
+                        parts_text.append(f"<!-- IMAGE_METADATA: {img_meta} -->")
                         parts_text.append(str(content))
                     elif msg.get("attachmentType") == 'application/pdf':
                         meta = json.dumps({
@@ -111,6 +118,10 @@ def upload_chat_to_drive(access_token, messages, file_id=None):
                 else:
                     content_str = str(content)
                 
+            reasoning = msg.get("reasoning_content")
+            if reasoning:
+                content_str = f"<reasoning>\n{reasoning}\n</reasoning>\n\n{content_str}"
+                
             timestamp = msg.get("timestamp", "")
             ts_meta = f"<!-- TIMESTAMP: {timestamp} -->" if timestamp else ""
             
@@ -118,7 +129,6 @@ def upload_chat_to_drive(access_token, messages, file_id=None):
             versions = msg.get("versions", [])
             versions_meta = ""
             if versions:
-                import json, base64
                 ver_json = json.dumps(versions)
                 ver_b64 = base64.b64encode(ver_json.encode('utf-8')).decode('utf-8')
                 versions_meta = f"<!-- VERSIONS: {ver_b64} -->"

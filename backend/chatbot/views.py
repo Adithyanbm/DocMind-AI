@@ -56,7 +56,7 @@ def extract_pdf_content(base64_pdf):
         print(f"PDF Extraction Error: {str(e)}")
         return [{"type": "text", "text": f"[Error extracting PDF: {str(e)}]"}]
 
-def stream_nvidia_response(messages, is_web_search=False):
+def stream_nvidia_response(messages, is_web_search=False, model_choice=None):
     # 1. PRE-PROCESS AND CLEAN MESSAGES
     processed_messages = []
     has_vision = False
@@ -181,18 +181,17 @@ def stream_nvidia_response(messages, is_web_search=False):
     
     # 3b. AGENTIC WEB SEARCH (OPTIONAL)
     search_context = ""
+    ui_search_payload = None
     if is_web_search:
         try:
-            # First, ask the model if it needs to search and what params to use
             search_decision_prompt = (
-                "You are an expert search assistant. Based on the conversation, decide if a web search is needed. "
-                "Output ONLY a JSON block. Use 'q' for query and 'engine' for the search engine. "
-                "Engines: google, bing, youtube, duckduckgo, google_scholar, google_maps, etc. "
-                "If no search is needed, use 'q': null. "
-                "Example: {\"q\": \"current price of Bitcoin\", \"engine\": \"google\"}"
+                "You are an expert search assistant. Based on the conversation, decide if web searches are needed. "
+                "Output ONLY a JSON block containing a list of up to 2 parallel queries. "
+                "Use 'q' for query and 'engine' for the search engine (google, bing, youtube, etc). "
+                "If no search is needed, return empty list. "
+                "Example for single topic: {\"queries\": [{\"q\": \"PBKS vs CSK yesterday result\", \"engine\": \"google\"}]}. ONLY generate multiple queries if the user explicitly asks entirely disjoint questions."
             )
             
-            # Temporary client for non-streaming decision
             decision_client = OpenAI(
                 base_url="https://integrate.api.nvidia.com/v1",
                 api_key=os.environ.get('NVIDIA_API_KEY')
@@ -202,41 +201,71 @@ def stream_nvidia_response(messages, is_web_search=False):
                 model="meta/llama-3.1-405b-instruct",
                 messages=[{"role": "system", "content": search_decision_prompt}] + final_sanitized_messages[-3:],
                 temperature=0.1,
-                max_tokens=150
+                max_tokens=250
             )
             
             decision_text = decision_response.choices[0].message.content.strip()
-            # Try to extract JSON if it was wrapped in markdown
             if "```json" in decision_text:
                 decision_text = decision_text.split("```json")[1].split("```")[0].strip()
             elif "```" in decision_text:
                 decision_text = decision_text.split("```")[1].strip()
             
             search_params = json.loads(decision_text)
+            queries = search_params.get("queries", [])
             
-            if search_params.get("q"):
-                search_q = search_params["q"]
-                search_engine = search_params.get("engine", "google")
-                
-                # Execute SerpApi
+            if queries:
                 s_client = serpapi.Client(api_key=os.getenv("SERPAPI_KEY"))
-                search_results = s_client.search({
-                    "engine": search_engine,
-                    "q": search_q
-                })
+                all_snippets = []
+                ui_searches = []
                 
-                # Format a concise summary of results
-                snippets = []
-                if "organic_results" in search_results:
-                    for res in search_results["organic_results"][:5]:
-                        snippets.append(f"- {res.get('title')}: {res.get('snippet')} ({res.get('link')})")
+                from urllib.parse import urlparse
                 
-                if snippets:
-                    search_context = f"\n\n[WEB SEARCH RESULTS FROM {search_engine.upper()}]\n" + "\n".join(snippets)
-                    search_context += "\n\nUse the above information to provide a detailed, accurate response. Cite sources if needed."
+                for q_item in queries[:3]:
+                    search_q = q_item.get("q")
+                    search_engine = q_item.get("engine", "google")
+                    if not search_q: continue
+                    
+                    search_results = s_client.search({"engine": search_engine, "q": search_q})
+                    
+                    if "organic_results" in search_results:
+                        ui_results = []
+                        for res in search_results["organic_results"][:10]:
+                            title = res.get('title', '')
+                            link = res.get('link', '')
+                            snippet = res.get('snippet', '')
+                            try:
+                                domain = urlparse(link).netloc.replace("www.", "")
+                            except:
+                                domain = "link"
+                            
+                            favicon = f"https://www.google.com/s2/favicons?domain={domain}&sz=32"
+                            
+                            ui_results.append({
+                                "title": title,
+                                "url": link,
+                                "domain": domain,
+                                "favicon": favicon
+                            })
+                            
+                            # Only include top 5 in LLM context string to save tokens
+                            if len(ui_results) <= 5:
+                                all_snippets.append(f"- [{search_q}] {title}: {snippet} ({link})")
+                                
+                        ui_searches.append({
+                            "query": search_q,
+                            "count": len(ui_results),
+                            "results": ui_results
+                        })
+                
+                if all_snippets:
+                    search_context = "\n\n[WEB SEARCH RESULTS]\n" + "\n".join(all_snippets)
+                    search_context += "\n\nUse the above information to provide a detailed, accurate response."
+                
+                if ui_searches:
+                    ui_search_payload = {"searches": ui_searches}
+                    
         except Exception as se:
             print(f"Search agent error: {str(se)}")
-            # Fallback: continue without search results
 
     # Assembly with a single system prompt at the top
     # Update system prompt if there is search context
@@ -246,9 +275,28 @@ def stream_nvidia_response(messages, is_web_search=False):
     final_input_messages = [docmind_sys_prompt] + final_sanitized_messages
 
     # 4. SELECT MODEL AND CALL COMPLETION
-    model_to_use = "meta/llama-3.2-90b-vision-instruct" if has_vision else "mistralai/mistral-large-3-675b-instruct-2512"
+    model_to_use = "meta/llama-3.2-90b-vision-instruct"
+    if not has_vision:
+        if model_choice == 'gemini-3.1-pro':
+            model_to_use = "meta/llama-3.1-405b-instruct"
+        elif model_choice == 'gemini-3-pro':
+            model_to_use = "meta/llama-3.1-70b-instruct"
+        elif model_choice == 'gemini-3-flash':
+            model_to_use = "meta/llama-3.1-8b-instruct"
+        else:
+            model_to_use = "meta/llama-3.2-90b-vision-instruct" # Fallback that handles alternating safely
     
     try:
+        # Pre-yield the web search context explicitly so the frontend saves it to the conversation history permanently
+        if ui_search_payload:
+            payload_str = json.dumps(ui_search_payload)
+            combined = f"<docmind_search_ui>{payload_str}</docmind_search_ui>\n<search_results_metadata>\n{search_context.strip()}\n</search_results_metadata>\n"
+            yield f"data: {json.dumps({'choices': [{'delta': {'content': '', 'reasoning_content': combined}}] })}\n\n"
+        elif search_context:
+            # Fallback if UI structure somehow failed but context exists
+            search_display = "[Agentic Web Search Executed]\n" + "\n".join(["- " + s.split("): ")[0] + ")" for s in search_context.split("\n- ") if s] )
+            yield f"data: {json.dumps({'choices': [{'delta': {'content': '', 'reasoning_content': search_context.strip() + '\\n'}}] })}\n\n"
+
         client = OpenAI(
             base_url="https://integrate.api.nvidia.com/v1",
             api_key=os.environ.get('NVIDIA_API_KEY'),
@@ -303,6 +351,7 @@ def chat_completions(request):
     try:
         messages = request.data.get('messages', [])
         is_web_search = request.data.get('isWebSearchActive', False)
+        model_choice = request.data.get('model', None)
         
         # Protect against empty messages
         if not messages:
@@ -310,7 +359,7 @@ def chat_completions(request):
 
         # Use Django's StreamingHttpResponse to pipe the generator to the client
         return StreamingHttpResponse(
-            stream_nvidia_response(messages, is_web_search=is_web_search),
+            stream_nvidia_response(messages, is_web_search=is_web_search, model_choice=model_choice),
             content_type='text/event-stream'
         )
         
