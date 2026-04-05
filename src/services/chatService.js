@@ -40,7 +40,7 @@ export const deleteHistory = async (fileId, googleToken) => {
   }
 };
 
-export const getChatCompletions = async (messages, signal, isWebSearchActive = false, model = null) => {
+export const getChatCompletions = async (messages, signal, isWebSearchActive = false, model = null, extendedThinking = false) => {
   let token = localStorage.getItem('access');
   
   const makeRequest = async (authToken) => {
@@ -53,7 +53,8 @@ export const getChatCompletions = async (messages, signal, isWebSearchActive = f
       body: JSON.stringify({ 
         messages,
         isWebSearchActive,
-        model
+        model,
+        extendedThinking
       }),
       signal
     });

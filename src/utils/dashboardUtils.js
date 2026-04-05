@@ -4,11 +4,8 @@
  * Infer a meaningful filename from code content
  */
 export const inferCodeName = (rawCode, lang) => {
-  const filenameComment = rawCode.match(/^#\s*filename:\s*(\S+)/im)
-    || rawCode.match(/^\/\/\s*filename:\s*(\S+)/im)
-    || rawCode.match(/^<!--\s*filename:\s*(\S+)/im)
-    || rawCode.match(/^\/\*\s*filename:\s*(\S+)/im);
-  if (filenameComment) return filenameComment[1];
+  const filenameComment = rawCode.match(/^\s*(?:#|\/\/|<!--|\/\*)\s*filename:\s*([\w\.\-\_\/]+)(?:\s*-->|\s*->|\s*\*\/|$|\s)/im);
+  if (filenameComment) return filenameComment[1].trim();
 
   const extMap = { 
     python: 'py', javascript: 'js', typescript: 'ts', jsx: 'jsx', tsx: 'tsx', 
@@ -57,9 +54,14 @@ export const cleanMarkdown = (text) => {
   if (match) {
     finalCleaned = match[1].replace(/\n?```\s*$/, '');
   }
+  
+  // Strip out any hallucinated metadata tags that shouldn't be displayed
+  finalCleaned = finalCleaned
+    .replace(/<!--\s*ACTIVE_VERSION:\s*\d+\s*--?>/gi, '')
+    .replace(/<!--\s*VERSIONS:\s*.*?--?>/gi, '');
+    
   return finalCleaned
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/^([*+-]|\d+\.)\s*\n+/gm, '$1 ');
+    .replace(/\n{3,}/g, '\n\n');
 };
 
 /**
@@ -71,11 +73,17 @@ export const extractArtifacts = (text) => {
   let firstArtifactIndex = -1;
   let lastArtifactEndIndex = -1;
 
-  const regex = /```([\w-]+)?\n([\s\S]*?)(?:```|$)/g;
+  const regex = /```([\w-]+)?([^\n]*)\n?([\s\S]*?)(?:```|$)/g;
   let match;
   while ((match = regex.exec(text)) !== null) {
-    const rawCode = match[2].replace(/^\n+/, '').replace(/\n$/, '');
-    const hasFilenameTag = /^(?:#|\/\/|<!--|\/\*)\s*filename:\s*\S+/im.test(rawCode);
+    const lang = match[1] || 'text';
+    const firstLineExtra = match[2] || '';
+    const codeBody = match[3] || '';
+    let rawCode = (firstLineExtra + (firstLineExtra && codeBody ? '\n' : '') + codeBody)
+      .replace(/^\n+/, '')
+      .replace(/\n$/, '');
+      
+    const hasFilenameTag = /^\s*(?:#|\/\/|<!--|\/\*)\s*filename:\s*\S+/im.test(rawCode);
     const lineCount = rawCode.split('\n').length;
     
     if (hasFilenameTag || lineCount >= 12) {
@@ -84,15 +92,14 @@ export const extractArtifacts = (text) => {
       }
       lastArtifactEndIndex = match.index + match[0].length;
 
-      const lang = match[1] || 'text';
       const fileName = inferCodeName(rawCode, lang);
-      const descMatch = /^(?:#|\/\/|<!--|\/\*)\s*description:\s*(.*)/im.exec(rawCode);
+      const descMatch = /^\s*(?:#|\/\/|<!--|\/\*)\s*description:\s*(.*)/im.exec(rawCode);
       const fileDesc = descMatch ? descMatch[1].trim() : `Generated ${fileName}`;
       
       let cleanedCode = rawCode
-         .replace(/^(?:#|\/\/|<!--|\/\*)\s*filename:\s*(.*)\n?/im, '')
-         .replace(/^(?:#|\/\/|<!--|\/\*)\s*description:\s*(.*)\n?/im, '')
-         .trim();
+         .replace(/^\s*(?:#|\/\/|<!--|\/\*)\s*filename:\s*\S+(?:\s*(?:-->|->|\*\/))?\s*\n?/im, '')
+         .replace(/^\s*(?:#|\/\/|<!--|\/\*)\s*description:\s*.*?(?:-->|->|\*\/|(?=\n|$))\s*\n?/im, '')
+         .replace(/\s+$/, ''); // Only trim trailing whitespace to preserve leading indentation
 
       artifacts.push({ lang, code: cleanedCode, fileName, fileDesc });
     }

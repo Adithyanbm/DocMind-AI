@@ -208,3 +208,19 @@ Model used: meta/llama-3.2-90b-vision-instruct
 Error: Error code: 504
 Messages count: 2
 Model used: meta/llama-3.2-90b-vision-instruct
+
+Error: The read operation timed out
+Messages count: 1
+Model used: minimaxai/minimax-m2.5
+
+Error: The read operation timed out
+Messages count: 3
+Model used: minimaxai/minimax-m2.5
+
+Error: Request timed out.
+Messages count: 1
+Model used: deepseek-ai/deepseek-v3.2
+
+Error: Connection error.
+Messages count: 1
+Model used: deepseek-ai/deepseek-v3.2

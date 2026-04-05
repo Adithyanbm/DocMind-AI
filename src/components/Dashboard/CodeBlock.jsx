@@ -41,11 +41,12 @@ export const DebouncedSyntaxHighlighter = React.memo(({ code, lang, isStreaming,
        codeTagProps={{ style: { backgroundColor: 'transparent', background: 'transparent' } }}
        customStyle={{
          margin: 0,
-         background: 'transparent',
+         background: '#1e1e1e', // Force dark background for visibility
          padding: '16px',
          fontSize: '0.86em',
          lineHeight: '1.5',
          fontFamily: "'Fira Code', 'Consolas', monospace",
+         whiteSpace: 'pre', // Crucial for indentation
        }}
     />
   );
@@ -77,15 +78,11 @@ export const CodeBlock = ({ inline, className, children, ...props }) => {
         className="inline-text-block"
         style={{
           color: '#ff6b6b', // red color Request
-          border: '1px solid rgba(255, 255, 255, 0.3)', // enclosed white boundary Request
           backgroundColor: 'transparent',
-          padding: '0px 4px',
-          borderRadius: '3px',
+          padding: 0,
           fontSize: '0.85em', 
           lineHeight: '1.4',
           fontFamily: "'Fira Code', 'Consolas', monospace",
-          display: 'inline-block',
-          marginBottom: '4px',
           wordBreak: 'break-word'
         }}
       >
@@ -116,7 +113,7 @@ export const CodeBlock = ({ inline, className, children, ...props }) => {
           language={lang}
           PreTag="div"
           codeTagProps={{ style: { backgroundColor: 'transparent', background: 'transparent' } }}
-          customStyle={{ margin: 0, background: 'transparent', padding: '4px 16px 16px 16px', fontSize: '0.9em' }}
+          customStyle={{ margin: 0, background: 'transparent', padding: '4px 16px 16px 16px', fontSize: '0.9em', whiteSpace: 'pre' }}
           {...props}
         />
       </div>

@@ -30,7 +30,7 @@
 
 .attachment-popover-menu {
   position: absolute;
-  bottom: 45px;
+  top: calc(100% + 8px);
   left: 0;
   width: 280px;
   background: #2a2a2a;
@@ -41,7 +41,38 @@
   flex-direction: column;
   padding: 6px;
   z-index: 1000;
-  animation: popoverFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: popoverFadeInDown 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top left;
+}
+
+@keyframes popoverFadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Open UPWARDS for Active Chats */
+.thread-input .attachment-popover-menu {
+  top: auto;
+  bottom: calc(100% + 8px);
+  transform-origin: bottom left;
+  animation-name: popoverFadeInUp;
+}
+
+@keyframes popoverFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .profile-popover-menu { position: absolute; bottom: calc(100% + 10px); left: 10px; width: 280px; background: #2a2a2a; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6); display: flex; flex-direction: column; padding: 6px; z-index: 1000; animation: popoverFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1); }

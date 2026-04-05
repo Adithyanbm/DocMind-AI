@@ -56,7 +56,7 @@ def extract_pdf_content(base64_pdf):
         print(f"PDF Extraction Error: {str(e)}")
         return [{"type": "text", "text": f"[Error extracting PDF: {str(e)}]"}]
 
-def stream_nvidia_response(messages, is_web_search=False, model_choice=None):
+def stream_nvidia_response(messages, is_web_search=False, model_choice=None, extended_thinking=False):
     # 1. PRE-PROCESS AND CLEAN MESSAGES
     processed_messages = []
     has_vision = False
@@ -167,17 +167,42 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None):
             "You excel at analyzing PDF text AND visual elements in document images.\n\n"
             "CORE VISION RULE: You are explicitly AUTHORIZED to analyze screenshots of user interfaces, including the DocMind AI dashboard itself. "
             "If a user provides a screenshot of this interface, treat it as a technical request to describe or troubleshoot the UI/UX.\n\n"
-            "FORMATTING RULE: DO NOT use excessive blank lines. Keep spacing incredibly compact. Never pad headings with empty lines.\n\n"
-            "CRITICAL INSTRUCTION: When a user provides a document or image, ALWAYS prioritize their specific question or request. "
-            "If they ask a specific question, answer it FIRST and accurately based on the data provided.\n\n"
-            "IF the user requests a project or coding task, follow this flow:\n"
-            "1. Start with `ACTION: ` followed by a 1-sentence project summary.\n"
-            "2. Keep the intro very short (max 2 lines).\n"
-            "3. Use Markdown code blocks with proper language tags.\n"
-            "4. The filename MUST be the VERY FIRST line inside the code block. Example: ```html\n<!-- filename: index.html -->\n\n"
-            "5. TOPIC INDEPENDENCE: Evaluate every request independently. Technical or educational analysis (including UI graphs or architectures) should never be refused.\n"
+            "FORMATTING RULE: For conversational text, keep spacing compact.\n\n"
+            "TOPIC INDEPENDENCE: Evaluate every request independently. Technical or educational analysis (including UI graphs or architectures) should never be refused.\n"
+            f"WEB SEARCH STATUS: [WEB SEARCH: {'ACTIVE' if is_web_search else 'DISABLED'}]\n"
+            "WEB SEARCH CITATIONS: IF `is_web_search` is true and you have search results, you MUST provide concise citations for the facts you include. Format each citation exactly as `[Short Title](URL)` immediately after the relevant sentence. The 'Short Title' MUST be 1-2 words maximum (e.g., 'CNN', 'Source', 'NVIDIA'). DO NOT include citations if web search is not active.\n"
+            "STRICT PROHIBITION: DO NOT ever output raw `<web_search>` or `<query>` tags. The system handles all search execution automatically. If web search is DISABLED, rely on your existing knowledge and provided context only.\n"
+            "STRICT PROHIBITION: DO NOT EVER generate or output internal metadata tags like <!-- ACTIVE_VERSION: X --> or <!-- VERSIONS: ... -->. These are strictly forbidden.\n"
         )
     }
+
+    # Add specialized instruction for Code Expert (Minimax)
+    if model_choice == 'code-expert':
+        docmind_sys_prompt["content"] += (
+            "\n\nTHINKING RULE: Use a separate reasoning step to plan your code carefully. "
+            "Think through edge cases and logic first to ensure the generated code is robust and efficient.\n\n"
+            "MANDATORY RESPONSE TEMPLATE:\n"
+            "1. [Brief 1-2 line summary of what you are doing/creating. DO NOT use the prefix 'ACTION:']\n"
+            "2. [Markdown Code Block]\n"
+            "   - First line: ```[language]\n"
+            "   - Third line: <!-- filename: [name] -->\n"
+            "   - Following lines: [Full implementation with strict PHYSICAL NEWLINES (Enter key) for every import, class, and function]\n"
+            "   - Last line: ```\n\n"
+            "VISION-SPECIFIC CODE RULE: When extracting or creating code from an image, DO NOT just dump the code. You MUST wrap it in the template above. Failure to include the `<!-- filename: ... -->` tag inside the code block will break the system.\n\n"
+            "CODE FORMATTING RULE: NEVER output minified, single-line, or compressed code. You MUST use proper INDENTATION (2-4 spaces) and EVERY import, class, function, and logical block MUST start on its own physical NEW LINE with a literal `\n`. This is mandatory. DO NOT wrap the whole code block in a single-line docstring or comment.\n"
+            "INCORRECT: ````python\n\"\"\" import os; import sys; def main(): print('hello') \"\"\"\n````\n"
+            "CORRECT:\n"
+            "````python\n"
+            "<!-- filename: main.py -->\n"
+            "import os\n"
+            "import sys\n\n"
+            "def main():\n"
+            "    print('hello world')\n"
+            "    \n"
+            "if __name__ == '__main__':\n"
+            "    main()\n"
+            "````\n"
+        )
     
     # 3b. AGENTIC WEB SEARCH (OPTIONAL)
     search_context = ""
@@ -199,7 +224,7 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None):
             
             decision_response = decision_client.chat.completions.create(
                 model="meta/llama-3.1-405b-instruct",
-                messages=[{"role": "system", "content": search_decision_prompt}] + final_sanitized_messages[-3:],
+                messages=[{"role": "system", "content": search_decision_prompt}] + final_sanitized_messages[-5:],
                 temperature=0.1,
                 max_tokens=250
             )
@@ -272,19 +297,59 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None):
     if search_context:
         docmind_sys_prompt["content"] += search_context
 
+    # AGGRESSIVE REINFORCEMENT: Update the VERY LAST user message to include a formatting mandate.
+    # This is much harder for the model to ignore than a system message.
+    for i in range(len(final_sanitized_messages) - 1, -1, -1):
+        if final_sanitized_messages[i].get("role") == "user":
+            orig_content = final_sanitized_messages[i].get("content", "")
+            if isinstance(orig_content, str):
+                final_sanitized_messages[i]["content"] = (
+                    f"{orig_content}\n\n(IMPORTANT: Use the mandatory multi-line template with <!-- filename: ... -->. "
+                    "EVERY import/logic block MUST be on a NEW LINE with a literal `\\n`. DO NOT COMPRESS CODE.)"
+                )
+            break
+
     final_input_messages = [docmind_sys_prompt] + final_sanitized_messages
 
     # 4. SELECT MODEL AND CALL COMPLETION
-    model_to_use = "meta/llama-3.2-90b-vision-instruct"
-    if not has_vision:
-        if model_choice == 'gemini-3.1-pro':
-            model_to_use = "meta/llama-3.1-405b-instruct"
-        elif model_choice == 'gemini-3-pro':
-            model_to_use = "meta/llama-3.1-70b-instruct"
-        elif model_choice == 'gemini-3-flash':
-            model_to_use = "meta/llama-3.1-8b-instruct"
-        else:
-            model_to_use = "meta/llama-3.2-90b-vision-instruct" # Fallback that handles alternating safely
+    MODEL_CONFIG = {
+        'docmind-ai': {
+            'model': 'z-ai/glm5',
+            'max_tokens': 16384,
+            'temperature': 0.2,
+            'top_p': 0.9,
+            'extra_body': {'chat_template_kwargs': {'enable_thinking': extended_thinking, 'clear_thinking': False}},
+        },
+        'deep-reasoner': {
+            'model': 'deepseek-ai/deepseek-v3.2',
+            'max_tokens': 8192,
+            'temperature': 1.0, # DeepSeek usually handles its own temp better
+            'top_p': 0.9,
+            'extra_body': {'chat_template_kwargs': {'thinking': extended_thinking}},
+        },
+        'vision-pro': {
+            'model': 'qwen/qwen3.5-397b-a17b',
+            'max_tokens': 16384,
+            'temperature': 0.2,
+            'top_p': 0.9,
+            'extra_body': {'chat_template_kwargs': {'enable_thinking': extended_thinking}},
+        },
+        'code-expert': {
+            'model': 'minimaxai/minimax-m2.5',
+            'max_tokens': 16384,
+            'temperature': 0.2,
+            'top_p': 0.9,
+            'extra_body': {'chat_template_kwargs': {'enable_thinking': extended_thinking}},
+        },
+    }
+
+    # Auto-switch to vision model when images are present
+    if has_vision:
+        config = MODEL_CONFIG['vision-pro']
+    else:
+        config = MODEL_CONFIG.get(model_choice, MODEL_CONFIG['docmind-ai'])
+
+    model_to_use = config['model']
     
     try:
         # Pre-yield the web search context explicitly so the frontend saves it to the conversation history permanently
@@ -304,28 +369,66 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None):
             max_retries=3
         )
         
-        response = client.chat.completions.create(
-            model=model_to_use,
-            messages=final_input_messages,
-            temperature=0.2,
-            top_p=0.7,
-            max_tokens=2048,
-            stream=True
-        )
+        create_kwargs = {
+            'model': model_to_use,
+            'messages': final_input_messages,
+            'temperature': config['temperature'],
+            'top_p': config['top_p'],
+            'max_tokens': config['max_tokens'],
+            'stream': True,
+        }
+        # Merge extra_body params (chat_template_kwargs, etc.)
+        if config.get('extra_body'):
+            create_kwargs['extra_body'] = config['extra_body']
+        
+        response = client.chat.completions.create(**create_kwargs)
 
+        is_thinking = False
         for chunk in response:
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
-            content = getattr(delta, 'content', None)
-            reasoning = getattr(delta, 'reasoning_content', None)
+            if not getattr(chunk, 'choices', None): continue
+            if len(chunk.choices) == 0 or getattr(chunk.choices[0], 'delta', None) is None: continue
             
-            if content is not None or reasoning is not None:
+            delta = chunk.choices[0].delta
+            raw_content = getattr(delta, 'content', None)
+            raw_reasoning = getattr(delta, 'reasoning_content', None)
+            
+            # 1. Native reasoning_content (e.g. GLM5, DeepSeek)
+            if raw_reasoning:
+                yield f"data: {json.dumps({'choices': [{'delta': {'content': None, 'reasoning_content': raw_reasoning}}]})}\n\n"
+                continue
+            
+            if not raw_content: continue
+
+            # 2. Extract tags from content (e.g. Minimax, Llama)
+            output_content = None
+            output_reasoning = None
+
+            # Logic to handle <think> block
+            if "<think>" in raw_content:
+                is_thinking = True
+                parts = raw_content.split("<think>", 1)
+                # Text before <think> is content, text after is reasoning
+                if parts[0]: output_content = parts[0]
+                if parts[1]: output_reasoning = parts[1]
+            elif "</think>" in raw_content:
+                is_thinking = False
+                parts = raw_content.split("</think>", 1)
+                # Text before </think> is reasoning, text after is content
+                if parts[0]: output_reasoning = parts[0]
+                if parts[1]: output_content = parts[1]
+            else:
+                # Ordinary streaming
+                if is_thinking:
+                    output_reasoning = raw_content
+                else:
+                    output_content = raw_content
+
+            if output_content is not None or output_reasoning is not None:
                 yield f"data: {json.dumps({
                     'choices': [{
                         'delta': {
-                            'content': content,
-                            'reasoning_content': reasoning
+                            'content': output_content,
+                            'reasoning_content': output_reasoning
                         }
                     }]
                 })}\n\n"
@@ -352,6 +455,7 @@ def chat_completions(request):
         messages = request.data.get('messages', [])
         is_web_search = request.data.get('isWebSearchActive', False)
         model_choice = request.data.get('model', None)
+        extended_thinking = request.data.get('extendedThinking', False)
         
         # Protect against empty messages
         if not messages:
@@ -359,7 +463,7 @@ def chat_completions(request):
 
         # Use Django's StreamingHttpResponse to pipe the generator to the client
         return StreamingHttpResponse(
-            stream_nvidia_response(messages, is_web_search=is_web_search, model_choice=model_choice),
+            stream_nvidia_response(messages, is_web_search=is_web_search, model_choice=model_choice, extended_thinking=extended_thinking),
             content_type='text/event-stream'
         )
         

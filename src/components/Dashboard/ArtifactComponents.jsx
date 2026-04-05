@@ -96,7 +96,7 @@ export const ArtifactTimelineContainer = ({ artifacts, isStreaming, openArtifact
                 }
 
                 return (
-                   <div key={idx} className="unified-timeline-item" onClick={() => openArtifact(idx, art.lang, art.code)}>
+                   <div key={idx} className="unified-timeline-item" onClick={() => openArtifact(idx, art.lang, art.code, art.fileName)}>
                       <div className="timeline-document-icon">
                          <FileText size={16} />
                          <span className="timeline-filename-main">{art.fileDesc}</span>
@@ -136,7 +136,7 @@ export const ArtifactDownloadGrid = ({ artifacts, openArtifact }) => {
           key={idx} 
           className="artifact-download-card"
           style={{ animationDelay: `${idx * 0.1}s` }}
-          onClick={() => openArtifact(idx, art.lang, art.code)}
+          onClick={() => openArtifact(idx, art.lang, art.code, art.fileName)}
         >
           <div className="artifact-card-left">
             <div className="artifact-card-icon-box" style={{ background: 'transparent', border: 'none' }}>

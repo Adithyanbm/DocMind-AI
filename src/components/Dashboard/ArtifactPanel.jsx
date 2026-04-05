@@ -1,7 +1,8 @@
 import React from 'react';
-import { X, Check, ChevronDown, RotateCcw } from 'lucide-react';
+import { X, Check, ChevronDown, RotateCcw, Eye, Code } from 'lucide-react';
 import { DebouncedSyntaxHighlighter } from './CodeBlock';
 import { extractArtifacts } from '../../utils/dashboardUtils';
+import ArtifactPreview from './ArtifactPreview';
 
 export const ArtifactPanel = ({ 
   activeArtifact, 
@@ -21,6 +22,7 @@ export const ArtifactPanel = ({
   handleArtifactScroll, 
   userScrolledArtifactRef 
 }) => {
+  const [viewMode, setViewMode] = React.useState('code'); // 'code' or 'preview'
   if (!activeArtifact) return null;
 
   // Derive live code from messages — updates automatically when messages change during streaming
@@ -35,7 +37,7 @@ export const ArtifactPanel = ({
   const rawLiveCode = (liveArt?.code && liveArt.code.length >= (activeArtifact.codeSnapshot || '').length)
     ? liveArt.code
     : (activeArtifact.codeSnapshot || liveArt?.code || '');
-  const liveCode = rawLiveCode.replace(/^(?:#|\/\/|<!--|\/\*)\s*filename:\s*\S+.*\n?/i, '');
+  const liveCode = rawLiveCode; // It's already cleaned by extractArtifacts
   const liveLang = liveArt?.lang ?? activeArtifact.lang ?? 'text';
 
   return (
@@ -55,8 +57,29 @@ export const ArtifactPanel = ({
          <div className="artifact-panel-header" style={{ justifyContent: 'space-between' }}>
             <div className="artifact-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                <div className="artifact-header-title" style={{ marginRight: '4px' }}>
-                 {liveArt?.fileName || `artifact.${liveLang}`}
+                 {liveArt?.fileName || activeArtifact.fileName || `artifact.${liveLang}`}
                </div>
+
+                {/* View Toggle */}
+                {(liveLang === 'html' || liveLang === 'svg' || liveLang === 'jsx' || liveLang === 'tsx' || liveLang === 'css') && (
+                  <div className="artifact-view-toggle">
+                    <button 
+                       className={`view-toggle-btn ${viewMode === 'preview' ? 'active' : ''}`}
+                       onClick={() => setViewMode('preview')}
+                       title="Preview"
+                    >
+                       <Eye size={14} />
+                    </button>
+                    <button 
+                       className={`view-toggle-btn ${viewMode === 'code' ? 'active' : ''}`}
+                       onClick={() => setViewMode('code')}
+                       title="Code"
+                    >
+                       <Code size={14} />
+                    </button>
+                  </div>
+                )}
+
                {isStreaming && activeArtifact.msgIdx === messages.length - 1 && (
                    <div className="artifact-header-live">
                       <div className="artifact-header-live-dot"></div>
@@ -130,13 +153,17 @@ export const ArtifactPanel = ({
          </div>
          <div className="artifact-panel-body" ref={artifactScrollRef} onScroll={handleArtifactScroll}>
             {liveCode ? (
-              <DebouncedSyntaxHighlighter
-                 code={liveCode}
-                 lang={liveLang}
-                 isStreaming={isStreaming}
-                 scrollRef={artifactScrollRef}
-                 userScrolledUpRef={userScrolledArtifactRef}
-              />
+              viewMode === 'preview' ? (
+                <ArtifactPreview code={liveCode} lang={liveLang} />
+              ) : (
+                <DebouncedSyntaxHighlighter
+                  code={liveCode}
+                  lang={liveLang}
+                  isStreaming={isStreaming}
+                  scrollRef={artifactScrollRef}
+                  userScrolledUpRef={userScrolledArtifactRef}
+                />
+              )
             ) : (
               <div style={{ padding: '16px', color: '#888', fontSize: '0.9rem' }}>Generating code...</div>
             )}

@@ -1,5 +1,9 @@
 import React, { memo, useContext, useMemo, useRef, useState } from 'react';
-import { Paperclip, Copy, ThumbsUp, ThumbsDown, RotateCcw, Check, Pencil, ChevronLeft, ChevronRight, Info } from 'lucide-react';
+import { 
+  Paperclip, Copy, ThumbsUp, ThumbsDown, RotateCcw, Check, Pencil, 
+  ChevronLeft, ChevronRight, Info, Globe, ChevronDown, CheckCircle2, 
+  Clock, ArrowDown, ArrowUpRight, ExternalLink 
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cleanMarkdown, extractArtifacts } from '../../utils/dashboardUtils';
@@ -85,6 +89,49 @@ export const StitchLogo = ({ className = "", style = {} }) => (
   </div>
 );
 
+const CitationLink = ({ href, children }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  const domain = useMemo(() => {
+    try {
+      return new URL(href).hostname.replace('www.', '');
+    } catch {
+      return 'source';
+    }
+  }, [href]);
+
+  const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+
+  return (
+    <span 
+      className="citation-wrapper"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <a 
+        href={href} 
+        target="_blank" 
+        rel="noopener noreferrer" 
+        className="chat-citation-link"
+      >
+        <span className="citation-text">{children}</span>
+        <ArrowUpRight size={10} className="citation-arrow" />
+      </a>
+      
+      {isHovered && (
+        <div className="citation-tooltip">
+          <div className="tooltip-content">
+            <div className="tooltip-title">{children}</div>
+            <div className="tooltip-footer">
+              <img src={faviconUrl} alt="" className="tooltip-favicon" onError={(e) => { e.target.style.display='none'; }} />
+              <span className="tooltip-domain">{domain}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </span>
+  );
+};
+
 const markdownComponents = {
   p: ({ node, ...props }) => <div className="md-paragraph" style={{ margin: '0 0 0.5em 0', lineHeight: '1.6' }} {...props} />,
   li: ({ node, ...props }) => <li style={{ margin: '0.4em 0', lineHeight: '1.6' }} {...props} />,
@@ -96,10 +143,82 @@ const markdownComponents = {
   h4: ({ node, ...props }) => <h4 style={{ margin: '1.2em 0 0.5em 0', fontSize: '1.1em', fontWeight: '600' }} {...props} />,
   pre: ({ node, ...props }) => <div className="markdown-pre" style={{ margin: 0, padding: 0 }} {...props} />,
   code: (props) => <CodeBlock {...props} />,
-  a: ({ node, ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />,
+  a: ({ href, children }) => <CitationLink href={href}>{children}</CitationLink>,
 };
 
-import { Globe, ChevronDown, CheckCircle2 } from 'lucide-react';
+
+
+const ReasoningBlock = ({ reasoning, isStreaming }) => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isFullContent, setIsFullContent] = useState(false);
+
+  const title = useMemo(() => {
+    if (!reasoning) return "Thought Process";
+    const lines = reasoning.split('\n').filter(l => l.trim().length > 0);
+    if (lines.length > 0) {
+      const firstLine = lines[0].replace(/[#*`]/g, '').trim();
+      if (firstLine.length > 10) {
+        return firstLine.length > 80 ? firstLine.substring(0, 80) + "..." : firstLine;
+      }
+    }
+    return "Thought Process";
+  }, [reasoning]);
+
+  if (!reasoning || reasoning.length === 0) return null;
+
+  return (
+    <div className={`reasoning-block-v2 ${isCollapsed ? 'is-collapsed' : 'is-open'}`}>
+      <div className="reasoning-header-v2" onClick={() => setIsCollapsed(!isCollapsed)}>
+        <div className="reasoning-title-area">
+          <span className="reasoning-title-text">{title}</span>
+          <ChevronDown size={16} className={`reasoning-chevron-v2 ${isCollapsed ? 'collapsed' : 'expanded'}`} />
+        </div>
+      </div>
+
+      {!isCollapsed && (
+        <>
+          <div className={`reasoning-content-v2 ${!isFullContent ? 'is-truncated' : 'is-full'}`}>
+            <div className="reasoning-inner-body">
+              <div className="thinking-icon-col">
+                <Clock size={16} className={`thinking-clock-icon ${isStreaming ? 'spinning-clock' : ''}`} />
+              </div>
+              <div className="reasoning-text-col">
+                <div className="reasoning-markdown-v2">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                    {reasoning}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ paddingLeft: '32px', marginTop: '-4px' }}>
+            <button 
+              className="reasoning-toggle-btn" 
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsFullContent(!isFullContent);
+              }}
+            >
+              {isFullContent ? "Show less" : "Show more"}
+            </button>
+          </div>
+
+          <div className="reasoning-status-v2">
+            <div className="done-status-pill">
+              {isStreaming ? (
+                <Clock size={16} className="thinking-clock-icon spinning-clock" />
+              ) : (
+                <CheckCircle2 size={16} className="done-icon-v2" />
+              )}
+              <span>{isStreaming ? "Thinking..." : "Done"}</span>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 const WebSearchUI = ({ data }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -149,7 +268,19 @@ const WebSearchUI = ({ data }) => {
   );
 };
 
-export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg, isLatest }) => {
+const InterruptedMessageBlock = ({ onRetry }) => (
+  <div className="interrupted-block">
+    <div className="interrupted-left">
+      <Info size={18} className="interrupted-icon" />
+      <span className="interrupted-text">DocMind's response was interrupted</span>
+    </div>
+    <button className="interrupted-retry-btn" onClick={onRetry}>
+      Retry
+    </button>
+  </div>
+);
+
+export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg, isLatest, isStreaming }) => {
   const context = useContext(ArtifactContext);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(msg.content || '');
@@ -205,8 +336,8 @@ export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg,
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const openArtifact = React.useCallback((artIdx, lang, codeSnapshot) => {
-    context?.setActiveArtifact?.({ msgIdx, artIdx, lang, codeSnapshot: codeSnapshot || '' });
+  const openArtifact = React.useCallback((artIdx, lang, codeSnapshot, fileName) => {
+    context?.setActiveArtifact?.({ msgIdx, artIdx, lang, codeSnapshot: codeSnapshot || '', fileName: fileName || '' });
   }, [msgIdx, context]);
 
   const cleanedContent = useMemo(() => cleanMarkdown(cleanMsgContent), [cleanMsgContent]);
@@ -293,14 +424,10 @@ export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg,
             {searchPayload && <WebSearchUI data={searchPayload} />}
 
             {msg.reasoning_content && cleanReasoning.length > 0 && (
-              <details className="think-block">
-                <summary>Thought Process</summary>
-                <div className="think-content">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                    {cleanReasoning}
-                  </ReactMarkdown>
-                </div>
-              </details>
+              <ReasoningBlock 
+                reasoning={cleanReasoning} 
+                isStreaming={isThisStreamingMsg} 
+              />
             )}
 
             {msg.role === 'user' && isEditing ? (
@@ -378,6 +505,9 @@ export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg,
 
             {msg.role === 'assistant' && !isThisStreamingMsg && (
               <>
+                {msg.isInterrupted && (
+                  <InterruptedMessageBlock onRetry={() => window.dashboardHandleRetry && window.dashboardHandleRetry(msgIdx)} />
+                )}
                 <div className={`message-action-bar ${!isLatest ? 'historical-action-bar' : ''}`} style={{ display: 'flex', gap: '8px', marginTop: '4px', alignItems: 'center', color: 'var(--claude-text-muted)' }}>
                   <button className="icon-btn" onClick={handleCopy} title="Copy">
                     {copied ? <Check size={16} color="var(--claude-accent)" /> : <Copy size={16} />}
@@ -423,7 +553,7 @@ export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg,
             <button className="icon-btn" onClick={() => { navigator.clipboard.writeText(msg.content); setUserCopied(true); setTimeout(() => setUserCopied(false), 2000); }} title="Copy">
               {userCopied ? <Check size={14} color="var(--claude-accent)" /> : <Copy size={14} />}
             </button>
-            {totalVersions > 1 && (
+            {totalVersions > 1 && !isStreaming && (
               <div className="version-navigator" style={{ marginLeft: '4px' }}>
                 <button className="version-nav-btn" onClick={onPrevVersion} disabled={msg.activeVersionIndex === 0}>
                   <ChevronLeft size={14} />

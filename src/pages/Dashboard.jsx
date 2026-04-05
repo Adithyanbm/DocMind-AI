@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import {
-  Bot, Menu, Plus, Search, MessageSquare, Settings, ArrowUp, X, HardDrive, AlertTriangle, Check,
+  Bot, Menu, Plus, Search, MessageSquare, Settings, ArrowUp, ArrowDown, X, HardDrive, AlertTriangle, Check,
   ChevronDown, ChevronRight, Sparkles, Paperclip, Camera, FolderPlus, Book, Blocks, Globe, PenTool,
   Mic, MicOff, Star, Pencil, Trash2, Layers, Compass, MessageCircle, GraduationCap, Heart, Lightbulb
 } from 'lucide-react';
@@ -21,18 +21,18 @@ const formatRelativeTime = (dateString) => {
   if (!dateString) return '';
   const date = new Date(dateString);
   const now = new Date();
-  
+
   const dateStr = date.toDateString();
   const nowStr = now.toDateString();
   if (dateStr === nowStr) return 'Today';
-  
+
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   if (dateStr === yesterday.toDateString()) return 'Yesterday';
-  
+
   const diffTime = Math.abs(now - date);
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
+
   if (diffDays <= 7) return 'Past week';
   if (diffDays <= 30) return 'Past month';
   return 'Past year';
@@ -86,6 +86,7 @@ const Dashboard = () => {
   const activeStreamIdRef = useRef(null);
 
   const [autoScroll, setAutoScroll] = useState(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showNetworkError, setShowNetworkError] = useState(false);
@@ -97,6 +98,18 @@ const Dashboard = () => {
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [webSearchActive, setWebSearchActive] = useState(false);
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('modelSetting') || 'docmind-ai');
+  const [extendedThinking, setExtendedThinking] = useState(() => localStorage.getItem('extendedThinking') === 'true');
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [showMoreModels, setShowMoreModels] = useState(false);
+  const modelDropdownRef = useRef(null);
+
+  const MODEL_OPTIONS = [
+    { key: 'docmind-ai', label: 'GLM-5', desc: 'Advanced Chinese LLM', icon: 'Sparkles', premium: false },
+    { key: 'deep-reasoner', label: 'DeepSeek', desc: 'Mathematical reasoning expert', icon: 'Zap', premium: true, badge: 'Upgrade' },
+    { key: 'vision-pro', label: 'Qwen-3.5', desc: 'Fastest multilingual model', icon: 'Compass', premium: false },
+    { key: 'code-expert', label: 'Minimax', desc: 'Creative reasoning engine', icon: 'Layers', premium: false },
+  ];
 
   const handleSubmitRef = useRef(null);
 
@@ -118,6 +131,19 @@ const Dashboard = () => {
   useEffect(() => {
     localStorage.setItem('docmind_colorMode', colorMode);
   }, [colorMode]);
+
+  // Close model dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target)) {
+        setShowModelDropdown(false);
+      }
+    };
+    if (showModelDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showModelDropdown]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -295,7 +321,7 @@ const Dashboard = () => {
                 console.error("Failed to parse versions metadata", e);
               }
             }
-            
+
             // 0c. Extract reasoning_content if present
             let reasoning_content = null;
             const resMatch = content.match(/<reasoning>([\s\S]*?)<\/reasoning>/);
@@ -327,7 +353,7 @@ const Dashboard = () => {
                   attachmentType = meta.type || "image/png";
                   attachmentBase64 = meta.base64;
                   content = content.replace(imgMetaMatch[0], '').trim();
-                } catch(e) {}
+                } catch (e) { }
               }
               if (imgMatch) {
                 const base64Url = imgMatch[1];
@@ -359,14 +385,14 @@ const Dashboard = () => {
                 attachmentType = meta.type || "application/pdf";
                 attachmentNumPages = meta.pages || 0;
                 attachmentBase64 = meta.base64;
-                
+
                 if (previewMatch) {
                   attachmentData = previewMatch[1];
                   content = content.replace(previewMatch[0], '');
                 }
-                
+
                 content = content.replace(metaMatch[0], '').trim();
-                
+
                 // Clean up any remaining "[PDF Attachment: ...]" text
                 content = content.replace(/\[PDF Attachment:.*?\]/, '').trim();
 
@@ -379,12 +405,12 @@ const Dashboard = () => {
               }
             }
 
-            const msgObj = { 
-              role, 
-              content, 
-              apiContent, 
+            const msgObj = {
+              role,
+              content,
+              apiContent,
               reasoning_content,
-              attachment, 
+              attachment,
               attachmentBase64,
               attachmentType,
               attachmentData,
@@ -523,6 +549,13 @@ const Dashboard = () => {
       const { scrollTop, scrollHeight, clientHeight } = chatThread;
       const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
       setAutoScroll(isNearBottom);
+      
+      // Only show the scroll button if:
+      // 1. We have messages
+      // 2. The content is actually scrollable (scrollHeight > clientHeight) 
+      // 3. User is not currently at the bottom (!isNearBottom)
+      const canScroll = scrollHeight > clientHeight + 5; // buffer
+      setShowScrollButton(!isNearBottom && messages.length > 0 && canScroll);
 
       const threadRect = chatThread.getBoundingClientRect();
       const btns = chatThread.querySelectorAll('.code-copy-btn');
@@ -541,12 +574,22 @@ const Dashboard = () => {
     }
   };
 
-  const scrollToBottom = () => {
-    if (autoScroll) messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+  const scrollToBottom = (manual = false) => {
+    if (manual || autoScroll) {
+      messagesEndRef.current?.scrollIntoView({ behavior: manual ? 'smooth' : 'auto' });
+      if (manual) {
+        setAutoScroll(true);
+        setShowScrollButton(false);
+      }
+    }
   };
 
   useEffect(() => {
     scrollToBottom();
+    // Hide scroll button if messages are cleared
+    if (messages.length === 0) {
+      setShowScrollButton(false);
+    }
   }, [messages, isStreaming]);
 
   useEffect(() => {
@@ -587,19 +630,19 @@ const Dashboard = () => {
             numPages = result.numPages;
           }
         }
-        
+
         setTimeout(() => {
-          setAttachedFile({ 
-            name: file.name, 
-            type: file.type, 
-            size: file.size, 
+          setAttachedFile({
+            name: file.name,
+            type: file.type,
+            size: file.size,
             base64: base64String,
             thumbnail: thumbnail,
             numPages: numPages
           });
           setIsAttachmentLoading(false);
         }, 1200);
-      } catch (err) { 
+      } catch (err) {
         console.error("Failed to convert file to base64", err);
         setIsAttachmentLoading(false);
       }
@@ -622,7 +665,7 @@ const Dashboard = () => {
               setAttachedFile({ name: fileName, type: file.type, size: file.size, base64: base64String });
               setIsAttachmentLoading(false);
             }, 3000);
-          } catch (err) { 
+          } catch (err) {
             console.error("Failed to convert pasted image to base64", err);
             setIsAttachmentLoading(false);
           }
@@ -644,12 +687,12 @@ const Dashboard = () => {
         video: { cursor: "always" },
         audio: false
       });
-      
+
       setIsAttachmentLoading(true);
 
       const video = document.createElement("video");
       video.srcObject = stream;
-      
+
       // We must wait for metadata to be loaded so we know dimensions
       await new Promise((resolve) => {
         video.onloadedmetadata = () => resolve();
@@ -696,6 +739,16 @@ const Dashboard = () => {
     if (abortControllerRef.current) abortControllerRef.current.abort();
     stopSpeaking();
     setIsStreaming(false);
+    setMessages(prev => {
+      if (prev.length === 0) return prev;
+      const newMsgs = [...prev];
+      const lastMsg = { ...newMsgs[newMsgs.length - 1] };
+      if (lastMsg.role === 'assistant') {
+        lastMsg.isInterrupted = true;
+        newMsgs[newMsgs.length - 1] = lastMsg;
+      }
+      return newMsgs;
+    });
   };
 
   const handleSubmit = async (e, options = { fromVoice: false, retryIndex: null }) => {
@@ -708,7 +761,7 @@ const Dashboard = () => {
     if (options.editIndex !== null && options.editIndex !== undefined) {
       const targetIdx = options.editIndex;
       const oldMsg = messages[targetIdx];
-      
+
       // Reconstruct apiContent with attachment if present
       let apiContent = options.editContent;
       if (oldMsg.attachmentData && oldMsg.attachmentType && oldMsg.attachmentType.startsWith('image/')) {
@@ -727,9 +780,9 @@ const Dashboard = () => {
       // CAPTURE ALL MESSAGES after the edited one as the context for the OLD branch
       const downstreamMessages = messages.slice(targetIdx + 1);
 
-      const newVersion = { 
-        content: options.editContent, 
-        apiContent, 
+      const newVersion = {
+        content: options.editContent,
+        apiContent,
         timestamp: new Date().toISOString(),
         followingMessages: [], // New branch starts empty
         // PRESERVE ATTACHMENTS
@@ -739,10 +792,10 @@ const Dashboard = () => {
         attachmentNumPages: oldMsg.attachmentNumPages,
         attachmentBase64: oldMsg.attachmentBase64
       };
-      
-      const versions = oldMsg.versions || [{ 
-        content: oldMsg.content, 
-        apiContent: oldMsg.apiContent, 
+
+      const versions = oldMsg.versions || [{
+        content: oldMsg.content,
+        apiContent: oldMsg.apiContent,
         followingMessages: downstreamMessages, // Capture the current "future" for the original version
         timestamp: oldMsg.timestamp,
         // PRESERVE ATTACHMENTS
@@ -752,18 +805,18 @@ const Dashboard = () => {
         attachmentNumPages: oldMsg.attachmentNumPages,
         attachmentBase64: oldMsg.attachmentBase64
       }];
-      
+
       const updatedVersions = [...versions, newVersion];
-      
-      displayUserMessage = { 
-        ...oldMsg, 
-        content: options.editContent, 
+
+      displayUserMessage = {
+        ...oldMsg,
+        content: options.editContent,
         apiContent,
         versions: updatedVersions,
         activeVersionIndex: updatedVersions.length - 1,
         timestamp: new Date().toISOString()
       };
-      
+
       messagesToMap = [...messages.slice(0, targetIdx), displayUserMessage];
       setMessages(messagesToMap);
       setInput('');
@@ -772,19 +825,19 @@ const Dashboard = () => {
       // If clicking retry on an Assistant message, we want to resend the User message above it
       // If clicking retry on a User message, we want to resend that Specific User message
       const targetUserIdx = messages[options.retryIndex].role === 'user' ? options.retryIndex : options.retryIndex - 1;
-      
+
       if (targetUserIdx < 0 || messages[targetUserIdx].role !== 'user') return;
-      
+
       const targetUserMsg = messages[targetUserIdx];
       messagesToMap = messages.slice(0, targetUserIdx); // Get everything BEFORE the user message
-      
+
       // Resend the targeted user message
       displayUserMessage = { ...targetUserMsg, timestamp: new Date().toISOString() };
       messagesToMap = [...messagesToMap, displayUserMessage];
       setMessages(messagesToMap);
-      
+
       // Use the original content for API but reset user input field safely
-      setInput(''); 
+      setInput('');
       setAttachedFile(null);
     } else {
       if (!input.trim() && !attachedFile) return;
@@ -805,14 +858,14 @@ const Dashboard = () => {
       }
 
       displayUserMessage = {
-        role: 'user', 
-        content: input, 
+        role: 'user',
+        content: input,
         attachment: attachedFile ? attachedFile.name : null,
         attachmentType: attachedFile ? attachedFile.type : null,
-        attachmentData: attachedFile 
-          ? (attachedFile.type.startsWith('image/') 
-              ? `data:${attachedFile.type};base64,${attachedFile.base64}` 
-              : (attachedFile.thumbnail || null))
+        attachmentData: attachedFile
+          ? (attachedFile.type.startsWith('image/')
+            ? `data:${attachedFile.type};base64,${attachedFile.base64}`
+            : (attachedFile.thumbnail || null))
           : null,
         attachmentNumPages: attachedFile?.numPages || 0,
         attachmentBase64: (attachedFile && !attachedFile.type.startsWith('image/')) ? attachedFile.base64 : null,
@@ -845,7 +898,7 @@ const Dashboard = () => {
       return {
         role: msg.role === 'user' ? 'user' : 'assistant',
         content: msg.role === 'assistant' && cleanHistory
-          ? `<previous_thought_process>\n${cleanHistory}\n</previous_thought_process>\n${msg.content}`
+          ? `<previous_thought_process>\n${cleanHistory}\n</previous_thought_process>\n\n\n${msg.content}`
           : (msg.apiContent || msg.content)
       };
     });
@@ -868,8 +921,8 @@ const Dashboard = () => {
 
       let response;
       try {
-        const selectedModel = localStorage.getItem('modelSetting') || 'gemini-3.1-pro';
-        response = await chatService.getChatCompletions(apiMessages, abortControllerRef.current.signal, webSearchActive, selectedModel);
+        const modelToSend = selectedModel || 'docmind-ai';
+        response = await chatService.getChatCompletions(apiMessages, abortControllerRef.current.signal, webSearchActive, modelToSend, extendedThinking);
       } catch (fErr) {
         if (fErr.name === 'AbortError') return;
         console.error("Fetch error detected", fErr);
@@ -933,7 +986,8 @@ const Dashboard = () => {
             setMessages(prev => {
               const newMsgs = [...prev];
               const lastMsg = { ...newMsgs[newMsgs.length - 1] };
-              lastMsg.content = assistantContent;
+              // Strip hallucinated search tags for safety
+              lastMsg.content = assistantContent.replace(/<web_search>.*?<\/web_search>/gs, '').replace(/<query>.*?<\/query>/gs, '');
               lastMsg.reasoning_content = assistantReasoning;
               newMsgs[newMsgs.length - 1] = lastMsg;
               return newMsgs;
@@ -966,7 +1020,7 @@ const Dashboard = () => {
               // Ensure we don't duplicate if it was already an array
               const currentFollowing = newMsgs[i].versions[activeIdx].followingMessages || [];
               const alreadyHasAssistant = currentFollowing.some(m => m.role === 'assistant' && m.content === assistantContent);
-              
+
               if (!alreadyHasAssistant) {
                 newMsgs[i].versions[activeIdx].followingMessages = [assistantMsg];
               }
@@ -996,15 +1050,17 @@ const Dashboard = () => {
         if (lastInputWasVoiceRef.current) speakChunk(speechBuffer);
       }
     } catch (error) {
-      if (error.name === 'AbortError') autoSaveToDrive([...messagesRef.current], startingFileId, streamTrackerId);
-      else {
+      if (error.name === 'AbortError') {
+        autoSaveToDrive([...messagesRef.current], startingFileId, streamTrackerId);
+      } else {
         console.error('Chat error:', error);
         setMessages(prev => {
           if (activeStreamIdRef.current !== streamTrackerId) return prev;
           const newMsgs = [...prev];
-          const lastMsg = newMsgs[newMsgs.length - 1];
-          lastMsg.content = 'Sorry, there was an error communicating with the AI. Please try again.';
+          const lastMsg = { ...newMsgs[newMsgs.length - 1] };
+          lastMsg.isInterrupted = true;
           lastMsg.isError = true;
+          newMsgs[newMsgs.length - 1] = lastMsg;
           return newMsgs;
         });
       }
@@ -1031,7 +1087,7 @@ const Dashboard = () => {
       msgTurn.activeVersionIndex = versionIdx;
       msgTurn.content = activeVer.content;
       msgTurn.apiContent = activeVer.apiContent;
-      
+
       // RESTORE ATTACHMENTS
       msgTurn.attachment = activeVer.attachment;
       msgTurn.attachmentType = activeVer.attachmentType;
@@ -1042,19 +1098,19 @@ const Dashboard = () => {
       // 3. RECONSTRUCT full branch
       const updatedMessages = newMessages.slice(0, msgIdx);
       updatedMessages.push(msgTurn);
-      
+
       const following = activeVer.followingMessages || [];
       updatedMessages.push(...following);
-      
+
       // AUTO-SAVE on version switch
       autoSaveToDrive(updatedMessages, currentFileId);
-      
+
       return updatedMessages;
     });
   };
 
-  useEffect(() => { 
-    handleSubmitRef.current = handleSubmit; 
+  useEffect(() => {
+    handleSubmitRef.current = handleSubmit;
     window.dashboardHandleRetry = (idx) => handleSubmit(null, { fromVoice: false, retryIndex: idx });
     window.dashboardHandleEditSave = (idx, newContent) => handleSubmit(null, { editIndex: idx, editContent: newContent });
     window.dashboardHandleVersionSwitch = (idx, versionIdx) => handleVersionSwitch(idx, versionIdx);
@@ -1070,9 +1126,9 @@ const Dashboard = () => {
       setPreviewData(data);
       setIsPreviewModalOpen(true);
     };
-    return () => { 
-      delete window.dashboardHandleRetry; 
-      delete window.dashboardHandleEdit; 
+    return () => {
+      delete window.dashboardHandleRetry;
+      delete window.dashboardHandleEdit;
       delete window.dashboardHandlePreview;
     };
   }, [handleSubmit, messages]);
@@ -1207,10 +1263,21 @@ const Dashboard = () => {
               {messages.length > 0 && (
                 <div className="chat-thread" ref={chatThreadRef} onScroll={handleScroll}>
                   {messages.map((msg, index) => {
-                    // Check if this is the latest assistant message.
-                    const isLatest = index === messages.length - 1 || (index === messages.length - 2 && messages[messages.length - 1].role === 'user');
+                    // For assistant messages, we want them to show the same version switcher as the parent user message
+                    const displayMsg = (msg.role === 'assistant' && index > 0 && messages[index - 1].role === 'user')
+                      ? { ...msg, versions: messages[index - 1].versions, activeVersionIndex: messages[index - 1].activeVersionIndex }
+                      : msg;
+                    const isLatest = index === messages.length - 1 || (index === messages.length - 2 && isStreaming);
                     return (
-                      <MemoizedMessageRow key={index} msg={msg} user={user} msgIdx={index} isThisStreamingMsg={isStreaming && index === messages.length - 1} isLatest={isLatest} />
+                      <MemoizedMessageRow
+                        key={index}
+                        msg={displayMsg}
+                        user={user}
+                        msgIdx={msg.role === 'assistant' && index > 0 ? index - 1 : index}
+                        isThisStreamingMsg={isStreaming && index === messages.length - 1}
+                        isLatest={isLatest}
+                        isStreaming={isStreaming}
+                      />
                     );
                   })}
                   {isStreaming && messages[messages.length - 1]?.role !== 'assistant' && (
@@ -1223,6 +1290,14 @@ const Dashboard = () => {
                 </div>
               )}
 
+              {showScrollButton && (
+                <div className="scroll-bottom-container">
+                  <button className="scroll-bottom-btn" onClick={() => scrollToBottom(true)} title="Scroll to bottom">
+                    <ArrowDown size={18} strokeWidth={2.5} />
+                  </button>
+                </div>
+              )}
+
               <div className="input-container-wrapper">
                 {/* Placeholder for template-popup move */}
 
@@ -1232,22 +1307,22 @@ const Dashboard = () => {
                       <svg width="108" height="108" viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">
                         <defs>
                           <linearGradient id="shimmer">
-                            <stop offset="0%" stopColor="#3a3a3a"/>
-                            <stop offset="50%" stopColor="#5a5a5a"/>
-                            <stop offset="100%" stopColor="#3a3a3a"/>
+                            <stop offset="0%" stopColor="#3a3a3a" />
+                            <stop offset="50%" stopColor="#5a5a5a" />
+                            <stop offset="100%" stopColor="#3a3a3a" />
                             <animateTransform
                               attributeName="gradientTransform"
                               type="translate"
                               from="-108 0"
                               to="108 0"
                               dur="1.5s"
-                              repeatCount="indefinite"/>
+                              repeatCount="indefinite" />
                           </linearGradient>
                         </defs>
-                        <rect x="0.5" y="0.5" width="107" height="107" rx="4" fill="#1f1f1f" stroke="#3a3a3a" strokeWidth="1"/>
-                        <rect x="16" y="20" width="76" height="12" rx="6" fill="url(#shimmer)"/>
-                        <rect x="16" y="38" width="60" height="12" rx="6" fill="url(#shimmer)"/>
-                        <rect x="16" y="80" width="36" height="16" rx="6" fill="url(#shimmer)"/>
+                        <rect x="0.5" y="0.5" width="107" height="107" rx="4" fill="#1f1f1f" stroke="#3a3a3a" strokeWidth="1" />
+                        <rect x="16" y="20" width="76" height="12" rx="6" fill="url(#shimmer)" />
+                        <rect x="16" y="38" width="60" height="12" rx="6" fill="url(#shimmer)" />
+                        <rect x="16" y="80" width="36" height="16" rx="6" fill="url(#shimmer)" />
                       </svg>
                     </div>
                   )}
@@ -1261,10 +1336,10 @@ const Dashboard = () => {
                         </div>
                       ) : (
                         <div className="file-preview-card" onClick={() => {
-                          setPreviewData({ 
-                            name: attachedFile.name, 
-                            thumbnail: attachedFile.thumbnail, 
-                            numPages: attachedFile.numPages 
+                          setPreviewData({
+                            name: attachedFile.name,
+                            thumbnail: attachedFile.thumbnail,
+                            numPages: attachedFile.numPages
                           });
                           setIsPreviewModalOpen(true);
                         }}>
@@ -1276,11 +1351,11 @@ const Dashboard = () => {
                               </>
                             ) : (
                               <svg className="doc-icon-svg" width="38" height="46" viewBox="0 0 110 136" xmlns="http://www.w3.org/2000/svg">
-                                <rect x="0" y="0" width="110" height="136" rx="20" fill="#2c2f2c" stroke="rgba(255,255,255,0.1)" strokeWidth="2"/>
-                                <path d="M70 0 L110 40 L110 116 C110 127 101 136 90 136 L20 136 C9 136 0 127 0 116 L0 20 C0 9 9 0 20 0 Z" fill="#2c2f2c"/>
-                                <path d="M70 0 L70 30 C70 35 75 40 80 40 L110 40 Z" fill="rgba(255,255,255,0.1)"/>
-                                <rect x="25" y="60" width="60" height="6" rx="3" fill="rgba(255,255,255,0.2)"/>
-                                <rect x="25" y="80" width="40" height="6" rx="3" fill="rgba(255,255,255,0.2)"/>
+                                <rect x="0" y="0" width="110" height="136" rx="20" fill="#2c2f2c" stroke="rgba(255,255,255,0.1)" strokeWidth="2" />
+                                <path d="M70 0 L110 40 L110 116 C110 127 101 136 90 136 L20 136 C9 136 0 127 0 116 L0 20 C0 9 9 0 20 0 Z" fill="#2c2f2c" />
+                                <path d="M70 0 L70 30 C70 35 75 40 80 40 L110 40 Z" fill="rgba(255,255,255,0.1)" />
+                                <rect x="25" y="60" width="60" height="6" rx="3" fill="rgba(255,255,255,0.2)" />
+                                <rect x="25" y="80" width="40" height="6" rx="3" fill="rgba(255,255,255,0.2)" />
                               </svg>
                             )}
                           </div>
@@ -1294,24 +1369,23 @@ const Dashboard = () => {
                   )}
 
                   <textarea
-                    ref={textareaRef} 
-                    value={previewInput !== null ? previewInput : input} 
+                    ref={textareaRef}
+                    value={previewInput !== null ? previewInput : input}
                     onChange={(e) => {
                       if (previewInput !== null) { setPreviewInput(null); }
                       setInput(e.target.value);
-                    }} 
-                    onKeyDown={handleKeyDown} 
+                    }}
+                    onKeyDown={handleKeyDown}
                     onPaste={handlePaste}
-                    placeholder="How can I help you today?" 
-                    disabled={isStreaming} 
-                    rows={1} 
+                    placeholder="How can I help you today?"
+                    rows={1}
                     className={`chat-textarea ${previewInput !== null ? 'preview-mode' : ''}`}
                   />
 
                   <div className="input-controls">
                     <div className="input-controls-left" style={{ position: 'relative' }}>
                       <input type="file" ref={fileInputRef} onChange={(e) => { handleFileChange(e); setShowAttachmentMenu(false); }} style={{ display: 'none' }} />
-                      <button className={`attach-file-btn ${showAttachmentMenu ? 'active' : ''}`} onClick={() => setShowAttachmentMenu(!showAttachmentMenu)} disabled={isStreaming} title="Attachments"><Plus size={20} /></button>
+                      <button className={`attach-file-btn ${showAttachmentMenu ? 'active' : ''}`} onClick={() => setShowAttachmentMenu(!showAttachmentMenu)} title="Attachments"><Plus size={20} /></button>
                       {showAttachmentMenu && (
                         <>
                           <div className="attachment-overlay-invisible" onClick={() => setShowAttachmentMenu(false)}></div>
@@ -1339,8 +1413,8 @@ const Dashboard = () => {
                               <Blocks size={16} />
                               <span>Add connectors</span>
                             </button>
-                            <button 
-                              className={`popover-item ${webSearchActive ? 'active' : ''}`} 
+                            <button
+                              className={`popover-item ${webSearchActive ? 'active' : ''}`}
                               onClick={() => setWebSearchActive(!webSearchActive)}
                             >
                               <Globe size={16} />
@@ -1358,7 +1432,73 @@ const Dashboard = () => {
                     </div>
 
                     <div className="input-controls-right">
-                      <div className="model-selector-small">DocMind AI <ChevronDown size={14} /></div>
+                      <div className="model-selector-wrapper" ref={modelDropdownRef}>
+                        <div className="model-selector-small" onClick={() => setShowModelDropdown(!showModelDropdown)}>
+                          <div className="selected-model-pill">
+                            <span className="selected-model-name">
+                              {MODEL_OPTIONS.find(m => m.key === selectedModel)?.label || 'GLM-5'}{extendedThinking ? ' Extended' : ''}
+                            </span>
+                            <ChevronDown size={14} className={`chevron-icon ${showModelDropdown ? 'rotated' : ''}`} />
+                          </div>
+                        </div>
+                        {showModelDropdown && (
+                          <div className="model-dropdown claude-style">
+                            <div className="model-options-list">
+                              {(showMoreModels ? MODEL_OPTIONS : MODEL_OPTIONS.slice(0, 3)).map(opt => (
+                                <button
+                                  key={opt.key}
+                                  className={`model-option-v2 ${selectedModel === opt.key ? 'active' : ''}`}
+                                  onClick={() => {
+                                    setSelectedModel(opt.key);
+                                    localStorage.setItem('modelSetting', opt.key);
+                                    setShowModelDropdown(false);
+                                  }}
+                                >
+                                  <div className="model-option-main">
+                                    <div className="model-option-content">
+                                      <div className="model-option-header">
+                                        <span className="model-option-name">{opt.label}</span>
+                                        {opt.badge && <span className="model-badge">{opt.badge}</span>}
+                                      </div>
+                                      <span className="model-option-description">{opt.desc}</span>
+                                    </div>
+                                    {selectedModel === opt.key && <Check size={16} className="model-selected-check" />}
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+
+                            <div className="model-dropdown-divider"></div>
+
+                            <div className="model-toggle-row" onClick={(e) => {
+                              e.stopPropagation();
+                              const newVal = !extendedThinking;
+                              setExtendedThinking(newVal);
+                              localStorage.setItem('extendedThinking', newVal);
+                            }}>
+                              <div className="toggle-info">
+                                <span className="toggle-label">Extended thinking</span>
+                                <span className="toggle-sublabel">Think longer for complex tasks</span>
+                              </div>
+                              <div className={`claude-switch ${extendedThinking ? 'on' : 'off'}`}>
+                                <div className="switch-handle"></div>
+                              </div>
+                            </div>
+
+                            <div className="model-dropdown-divider"></div>
+
+                            {!showMoreModels && (
+                              <div className="model-dropdown-footer" onClick={(e) => {
+                                e.stopPropagation();
+                                setShowMoreModels(true);
+                              }}>
+                                <span>More models</span>
+                                <ChevronRight size={14} />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
 
                       {(isListening || isStreaming || isAiSpeaking) ? (
                         (lastInputWasVoiceRef.current || isListening) ? (
@@ -1461,7 +1601,7 @@ const Dashboard = () => {
                       'life': { icon: <Heart size={14} />, text: 'Life stuff' },
                       'choice': { icon: <Lightbulb size={14} />, text: "DocMind's choice" }
                     };
-                    
+
                     const opts = optionsMap[activeTemplateMenu] || [];
                     const activeHeader = headers[activeTemplateMenu];
 
@@ -1476,7 +1616,7 @@ const Dashboard = () => {
                         </div>
                         <div className="template-list">
                           {opts.map((t) => (
-                            <button key={t} className="template-item" 
+                            <button key={t} className="template-item"
                               onMouseEnter={() => setPreviewInput(t)}
                               onMouseLeave={() => setPreviewInput(null)}
                               onClick={() => { setInput(t); setPreviewInput(null); setActiveTemplateMenu(null); }}
@@ -1561,13 +1701,13 @@ const Dashboard = () => {
                   <X size={20} />
                 </button>
               </div>
-              
+
               <div className="modal-preview-body">
                 {previewData.thumbnail && (
                   <img src={previewData.thumbnail} alt="Full Preview" className="modal-preview-image" />
                 )}
               </div>
-              
+
               <div className="modal-footer">
                 <span>{previewData.numPages} {previewData.numPages === 1 ? 'page' : 'pages'}</span>
                 <span className="modal-footer-hint">Click anywhere outside to close</span>
