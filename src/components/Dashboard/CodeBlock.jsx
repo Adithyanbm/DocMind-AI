@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Copy, Check } from 'lucide-react';
+import { mapLanguage } from '../../utils/dashboardUtils';
 
 /* -- Performance: Debounced Viewer for streaming artifacts -- */
 export const DebouncedSyntaxHighlighter = React.memo(({ code, lang, isStreaming, scrollRef, userScrolledUpRef }) => {
@@ -32,7 +33,7 @@ export const DebouncedSyntaxHighlighter = React.memo(({ code, lang, isStreaming,
   return (
     <SyntaxHighlighter
        children={displayCode}
-       language={lang}
+       language={mapLanguage(lang)}
        style={oneDark}
        PreTag="div"
        showLineNumbers={true}
@@ -110,7 +111,7 @@ export const CodeBlock = ({ inline, className, children, ...props }) => {
         <SyntaxHighlighter
           children={rawCode}
           style={oneDark}
-          language={lang}
+          language={mapLanguage(lang)}
           PreTag="div"
           codeTagProps={{ style: { backgroundColor: 'transparent', background: 'transparent' } }}
           customStyle={{ margin: 0, background: 'transparent', padding: '4px 16px 16px 16px', fontSize: '0.9em', whiteSpace: 'pre' }}

@@ -26,3 +26,136 @@
 .accordion-body-wrapper.expanded { grid-template-rows: 1fr; opacity: 1; visibility: visible; }
 .shimmer-text { mask-image: linear-gradient(to right, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 50%, rgba(0,0,0,1) 60%); mask-size: 400% 100%; animation: shadeSweep 6s ease-in-out infinite; }
 @keyframes shadeSweep { 0% { mask-position: 100% 0; } 100% { mask-position: -100% 0; } }
+
+/* Modern Artifact Grid */
+.artifact-modern-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0 20px 0;
+  width: 100%;
+}
+
+.artifact-premium-card {
+  background: var(--theme-bg, rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.artifact-premium-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
+.art-card-main {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  gap: 16px;
+}
+
+.art-card-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--theme-bg);
+  color: var(--theme-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+.artifact-premium-card:hover .art-card-icon-wrapper {
+  transform: scale(1.05);
+  border-color: var(--theme-color);
+}
+
+.art-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.art-card-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.art-card-filename {
+  color: #fff;
+  font-weight: 550;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.art-card-ext {
+  color: var(--claude-text-muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.art-card-label {
+  color: var(--claude-text-muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+}
+
+.art-card-actions {
+  flex-shrink: 0;
+}
+
+.art-view-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.artifact-premium-card:hover .art-view-btn {
+  background: var(--theme-color);
+  border-color: var(--theme-color);
+  color: #000;
+}
+
+.art-card-bottom-actions {
+  display: flex;
+  padding: 6px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.art-mini-download {
+  background: transparent;
+  border: none;
+  color: var(--claude-text-muted);
+  font-size: 0.75rem;
+  font-weight: 450;
+  cursor: pointer;
+  padding: 4px 0;
+  transition: color 0.2s;
+}
+
+.art-mini-download:hover {
+  color: var(--theme-color);
+}

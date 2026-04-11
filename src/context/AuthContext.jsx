@@ -155,28 +155,41 @@ export const AuthProvider = ({ children }) => {
     navigate('/signin');
   };
 
-  const loginWithGoogle = async (googleToken) => {
+  const loginWithGoogle = async (code) => {
     try {
-      // The frontend now passes an access_token with drive.file scopes
-      const response = await api.post('/auth/google/', { token: googleToken });
+      setLoading(true);
+      console.log("Google code received, calling backend...");
+      const response = await api.post('/auth/google/', { code }, { 
+        headers: { SkipAuth: 'true' } 
+      });
+      console.log("Backend response:", response.data);
       
-      const { access, refresh, user: userData } = response.data;
+      const { access, refresh, google_access_token, user: userData } = response.data;
       
       localStorage.setItem('access', access);
       localStorage.setItem('refresh', refresh);
-      localStorage.setItem('google_access_token', googleToken); // Save for background sync
+      if (google_access_token) {
+        localStorage.setItem('google_access_token', google_access_token);
+      }
       localStorage.setItem('docmind_user', JSON.stringify(userData));
       
+      console.log("Updating user state...");
       setUser({ authenticated: true, ...userData });
+      
+      console.log("Login successful! Navigating to dashboard...");
       navigate('/dashboard');
       
       return { success: true };
     } catch (error) {
       console.error('Google Login Error:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to authenticate with Google';
+      alert('Google Login Error: ' + errorMessage);
       return { 
         success: false, 
-        error: error.response?.data?.error || 'Failed to authenticate with Google' 
+        error: errorMessage
       };
+    } finally {
+      setLoading(false);
     }
   };
 

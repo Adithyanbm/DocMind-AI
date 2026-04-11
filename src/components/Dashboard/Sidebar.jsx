@@ -1,5 +1,4 @@
-import React from 'react';
-import { Menu, Search, Bot, Plus, MessageSquare, Layers, Compass, Trash2, Settings, ChevronRight, HelpCircle, ArrowUpCircle, Download, Gift, Info, LogOut, Blocks, PenTool } from 'lucide-react';
+import { Menu, Search, Bot, Plus, MessageSquare, Layers, Compass, Trash2, Settings, ChevronRight, HelpCircle, ArrowUpCircle, Download, Gift, Info, LogOut, Blocks, PenTool, History, Briefcase, MoreHorizontal } from 'lucide-react';
 import { StaticStitchLogo } from './MessageRow';
 
 export const Sidebar = ({ 
@@ -12,6 +11,8 @@ export const Sidebar = ({
   currentFileId, 
   loadChat, 
   deleteChat, 
+  setActiveView,
+  activeView,
   user, 
   showProfileMenu, 
   setShowProfileMenu, 
@@ -76,7 +77,7 @@ export const Sidebar = ({
           <button className="icon-btn" onClick={newChat} title="New Chat"><Plus size={18} /></button>
           <button className="icon-btn" onClick={() => setIsSearchModalOpen(true)} title="Search"><Search size={18} /></button>
           <button className="icon-btn" title="Projects"><Layers size={18} /></button>
-          <button className="icon-btn" title="Chats"><MessageSquare size={18} /></button>
+          <button className="icon-btn" onClick={() => setActiveView('chats-view')} title="Chats"><MessageSquare size={18} /></button>
           <button className="icon-btn" title="Artifacts"><Blocks size={18} /></button>
           <button className="icon-btn" title="Code"><PenTool size={18} /></button>
         </div>
@@ -94,61 +95,87 @@ export const Sidebar = ({
   return (
     <div className={`claude-sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
       <div className="sidebar-header">
+        <div className="sidebar-brand">Mosaic</div>
         <button className="icon-btn" onClick={() => setSidebarOpen(false)} title="Close Sidebar">
           <Menu size={20} />
         </button>
-        <button className="icon-btn" onClick={() => setIsSearchModalOpen(true)} title="Search chats (Ctrl+K)">
-          <Search size={20} />
+      </div>
+
+      {/* Fixed Top Actions */}
+      <div className="sidebar-top-actions">
+        <button className="sidebar-action-item" onClick={newChat}>
+          <div className="sidebar-icon-circle"><Plus size={16} /></div>
+          <span>New chat</span>
+        </button>
+        <button className="sidebar-action-item" onClick={() => setIsSearchModalOpen(true)}>
+          <Search size={18} />
+          <span>Search</span>
+        </button>
+        <button className="sidebar-action-item">
+          <Briefcase size={18} />
+          <span>Customize</span>
         </button>
       </div>
 
-      <button className="new-chat-btn" onClick={newChat} title="New chat (Ctrl+Shift+O)">
-        <div className="new-chat-content">
-          <div className="new-chat-plus-icon"><Plus size={14} /></div>
-          <span>New chat</span>
-        </div>
-      </button>
-
-      <div className="sidebar-section">
-        <a href="#" className="sidebar-link active"><MessageSquare size={16} /> Chats</a>
-        <a href="#" className="sidebar-link"><Layers size={16} /> Projects</a>
-        <a href="#" className="sidebar-link"><Compass size={16} /> Discover</a>
-      </div>
-
-      <div className="sidebar-recents">
-        <div className="recents-header">Recents (Google Drive)</div>
-        {recentChats.filter(chat => chat.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? (
-          <div className="recent-link" style={{ opacity: 0.5 }}>
-             {searchQuery ? "No results found." : "No recent chats found."}
+      {/* Combined Scrollable Section */}
+      <div className="sidebar-scroll-container">
+        <div className="scroll-content">
+          <div className="navigation-links">
+            <a 
+              href="#" 
+              className={`sidebar-link ${activeView === 'chats-view' ? 'active' : ''}`}
+              onClick={(e) => { e.preventDefault(); setActiveView('chats-view'); }}
+            >
+              <MessageSquare size={18} /> <span>Chats</span>
+            </a>
+            <a href="#" className="sidebar-link"><Layers size={18} /> <span>Projects</span></a>
+            <a href="#" className="sidebar-link"><Blocks size={18} /> <span>Artifacts</span></a>
           </div>
-        ) : (
-          recentChats
-            .filter(chat => chat.name.toLowerCase().includes(searchQuery.toLowerCase()))
-            .map(chat => (
-            <div key={chat.id} className={`recent-chat-item ${currentFileId === chat.id ? 'active' : ''}`}>
-              <a 
-                href="#" 
-                className="recent-link"
-                onClick={(e) => { e.preventDefault(); loadChat(chat.id); }}
-              >
-                {chat.name.replace('DocMind_Chat_', '').replace('.md', '').replaceAll('_', ' ')}
-              </a>
-              <button className="delete-chat-btn" onClick={(e) => deleteChat(chat.id, e)} title="Delete chat">
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))
-        )}
+
+          <div className="sidebar-recents">
+            <div className="recents-header">Recents</div>
+            {recentChats.filter(chat => (chat.name || '').toLowerCase().includes((searchQuery || '').toLowerCase())).length === 0 ? (
+              <div className="recent-link-placeholder">
+                 {searchQuery ? "No results found." : "No recent chats found."}
+              </div>
+            ) : (
+              recentChats
+                .filter(chat => (chat.name || '').toLowerCase().includes((searchQuery || '').toLowerCase()))
+                .map(chat => (
+                <div key={chat.id} className={`recent-chat-item ${currentFileId === chat.id ? 'active' : ''}`}>
+                  <a 
+                    href="#" 
+                    className="recent-link"
+                    onClick={(e) => { e.preventDefault(); loadChat(chat.id); }}
+                  >
+                    {(chat.name || '').replace('DocMind_Chat_', '').replace('.md', '').replaceAll('_', ' ')}
+                  </a>
+                  <button className="recent-more-btn">
+                    <MoreHorizontal size={14} />
+                  </button>
+                  <button className="delete-chat-btn" onClick={(e) => deleteChat(chat.id, e)} title="Delete chat">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="sidebar-footer" style={{ position: 'relative' }}>
         <button className={`user-profile-btn ${showProfileMenu ? 'active' : ''}`} onClick={() => setShowProfileMenu(!showProfileMenu)}>
            <div className="user-avatar">{user?.email?.charAt(0).toUpperCase() || 'U'}</div>
            <div className="user-info">
-             <span className="user-name">{user?.first_name ? user.first_name : (user?.email ? user.email.split('@')[0] : 'User')}</span>
+             <span className="user-name">{user?.first_name ? user.first_name : (user?.email ? user.email.split('@')[0] : 'adhithyan')}</span>
              <span className="user-plan">Free plan</span>
            </div>
-           <Settings size={16} className="settings-icon" />
+           <div className="user-profile-arrows">
+             <div className="arrow-updown-stack">
+               <ChevronRight size={14} style={{ transform: 'rotate(-90deg)', marginBottom: '-4px' }} />
+               <ChevronRight size={14} style={{ transform: 'rotate(90deg)' }} />
+             </div>
+           </div>
         </button>
         
         {showProfileMenu && renderProfilePopover()}

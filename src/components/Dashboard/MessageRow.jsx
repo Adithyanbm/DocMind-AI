@@ -336,8 +336,16 @@ export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg,
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const openArtifact = React.useCallback((artIdx, lang, codeSnapshot, fileName) => {
-    context?.setActiveArtifact?.({ msgIdx, artIdx, lang, codeSnapshot: codeSnapshot || '', fileName: fileName || '' });
+  const openArtifact = React.useCallback((art, artIdx) => {
+    context?.setActiveArtifact?.({ 
+      msgIdx, 
+      artIdx, 
+      lang: art.lang, 
+      codeSnapshot: art.code || '', 
+      fileName: art.fileName || '',
+      identifier: art.identifier,
+      isStructured: art.isStructured
+    });
   }, [msgIdx, context]);
 
   const cleanedContent = useMemo(() => cleanMarkdown(cleanMsgContent), [cleanMsgContent]);

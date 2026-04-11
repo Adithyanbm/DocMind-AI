@@ -184,7 +184,7 @@ def list_drive_chats(access_token):
     try:
         service = get_drive_service(access_token)
         query = "name contains 'DocMind_Chat_' and mimeType = 'text/markdown' and trashed = false"
-        results = service.files().list(q=query, fields="files(id, name, modifiedTime)", orderBy="modifiedTime desc").execute()
+        results = service.files().list(q=query, fields="files(id, name, modifiedTime, starred)", orderBy="modifiedTime desc").execute()
         items = results.get('files', [])
         
         return {
@@ -266,6 +266,24 @@ def rename_chat_on_drive(access_token, file_id, new_name):
         return {"success": False, "error": "unauthorized", "details": str(auth_err)}
     except (ConnectionError, TimeoutError) as net_err:
         print(f"Network issue during Drive rename: {str(net_err)}")
+        return {"success": False, "error": "connectivity_issue", "details": str(net_err)}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+def toggle_chat_star_on_drive(access_token, file_id, starred):
+    """
+    Toggles the starred status of a chat file on Google Drive.
+    """
+    try:
+        service = get_drive_service(access_token)
+        service.files().update(fileId=file_id, body={'starred': starred}).execute()
+        return {"success": True}
+    except exceptions.RefreshError as auth_err:
+        return {"success": False, "error": "unauthorized", "details": str(auth_err)}
+    except (ConnectionError, TimeoutError) as net_err:
+        print(f"Network issue during Drive star toggle: {str(net_err)}")
         return {"success": False, "error": "connectivity_issue", "details": str(net_err)}
     except Exception as e:
         import traceback

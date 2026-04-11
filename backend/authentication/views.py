@@ -6,7 +6,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
 from .serializers import RegisterSerializer
 from .models import UserProfile
-from .google_auth import verify_google_oauth_token
+from .google_auth import verify_google_oauth_token, exchange_code_for_tokens
+from django.utils import timezone
+from datetime import timedelta
+import jwt
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -219,53 +222,101 @@ class GoogleLoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        token = request.data.get('token')
+        code = request.data.get('code')
         
-        if not token:
-            return Response({'error': 'Google token is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not code:
+            return Response({'error': 'Google authorization code is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        idinfo = verify_google_oauth_token(token)
-        
-        if not idinfo:
-            return Response({'error': 'Invalid Google token'}, status=status.HTTP_400_BAD_REQUEST)
-
-        email = idinfo.get('email')
-        first_name = idinfo.get('given_name', '')
-        last_name = idinfo.get('family_name', '')
-        
-        if not email:
-            return Response({'error': 'Email not provided by Google'}, status=status.HTTP_400_BAD_REQUEST)
-            
         try:
-            # Check if user already exists
-            user = User.objects.get(email=email)
-            profile, _ = UserProfile.objects.get_or_create(user=user)
+            # Exchange code for tokens
+            token_data = exchange_code_for_tokens(code)
             
-            # Since they authenticated with Google, their email is inherently verified
-            if not profile.is_email_verified:
-                profile.is_email_verified = True
-                profile.save()
+            if not token_data:
+                print(f"FAILED to exchange Google code: {code}")
+                return Response({'error': 'Failed to exchange Google code. Check server logs for details.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            print(f"DEBUG: Token data received from Google: {token_data.keys()}")
+            access_token = token_data.get('access_token')
+            id_token = token_data.get('id_token')
+            refresh_token = token_data.get('refresh_token')
+            expires_in = token_data.get('expires_in', 3600)
+            
+            if not access_token and not id_token:
+                return Response({'error': 'No tokens received from Google'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Decode id_token to get user info (or use access_token with tokeninfo)
+            # We'll use the id_token if available as it's more direct
+            email = None
+            first_name = ''
+            last_name = ''
+
+            if id_token:
+                try:
+                    print("DEBUG: Attempting to decode ID token...")
+                    # We don't verify the signature here because we just got it from Google directly over HTTPS
+                    decoded_id_token = jwt.decode(id_token, options={"verify_signature": False})
+                    email = decoded_id_token.get('email')
+                    first_name = decoded_id_token.get('given_name', '')
+                    last_name = decoded_id_token.get('family_name', '')
+                    print(f"DEBUG: ID Token decoded successfully for: {email}")
+                except Exception as e:
+                    print(f"ID Token decode error: {e}")
+            
+            if not email and access_token:
+                print("DEBUG: Falling back to tokeninfo due to missing/invalid ID token...")
+                # Fallback to tokeninfo if id_token fails
+                idinfo = verify_google_oauth_token(access_token)
+                if idinfo:
+                    email = idinfo.get('email')
+                    first_name = idinfo.get('given_name', '')
+                    last_name = idinfo.get('family_name', '')
+            
+            if not email:
+                return Response({'error': 'Email not provided by Google or token verification failed'}, status=status.HTTP_400_BAD_REQUEST)
                 
-        except User.DoesNotExist:
-            # Create a new user
-            user = User.objects.create_user(
-                username=email, # Use email as username
-                email=email,
-                first_name=first_name,
-                last_name=last_name
-            )
-            # Create the profile and mark email as verified
-            profile = UserProfile.objects.create(user=user, is_email_verified=True)
+            try:
+                # Check if user already exists
+                user = User.objects.get(email=email)
+                profile, _ = UserProfile.objects.get_or_create(user=user)
+                
+                # Update verification status
+                if not profile.is_email_verified:
+                    profile.is_email_verified = True
+                print(f"DEBUG: Existing user logged in: {email}")
+            except User.DoesNotExist:
+                # Create a new user
+                print(f"DEBUG: Creating new user: {email}")
+                user = User.objects.create_user(
+                    username=email,
+                    email=email,
+                    first_name=first_name,
+                    last_name=last_name
+                )
+                profile = UserProfile.objects.create(user=user, is_email_verified=True)
 
-        # Generate tokens
-        refresh = RefreshToken.for_user(user)
+            # Save Google tokens to profile
+            profile.google_access_token = access_token
+            if refresh_token: # Google only sends refresh_token the first time
+                profile.google_refresh_token = refresh_token
+            profile.google_token_expiry = timezone.now() + timedelta(seconds=expires_in)
+            profile.save()
 
-        return Response({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-            'user': {
-                'email': user.email,
-                'first_name': user.first_name,
-                'last_name': user.last_name
-            }
-        }, status=status.HTTP_200_OK)
+            # Generate our own tokens
+            refresh = RefreshToken.for_user(user)
+
+            return Response({
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'google_access_token': access_token,
+                'user': {
+                    'email': user.email,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name
+                }
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(f"CRITICAL: Unexpected error in GoogleLoginView: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'error': f'Internal Server Error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

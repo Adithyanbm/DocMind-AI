@@ -123,3 +123,52 @@
 .toast-close:hover {
   background: rgba(218, 158, 37, 0.1);
 }
+
+/* Token Usage Indicator */
+.token-usage-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4px 10px;
+  border-radius: 20px;
+  color: var(--claude-text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.token-usage-indicator.critical {
+  color: #DA9E25;
+  border-color: rgba(218, 158, 37, 0.3);
+  background: rgba(218, 158, 37, 0.05);
+}
+
+.usage-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.usage-progress-fill {
+  height: 100%;
+  background: var(--claude-primary, #6b4fbb);
+  transition: width 0.3s ease;
+}
+
+.token-usage-indicator.critical .usage-progress-fill {
+  background: #DA9E25;
+}
+
+.network-error-toast.context-warning {
+    top: 70px; /* Offset from the network error if both are present */
+    background: rgba(75, 57, 2, 0.9);
+    backdrop-filter: blur(10px);
+}
+

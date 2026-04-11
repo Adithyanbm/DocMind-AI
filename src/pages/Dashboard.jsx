@@ -12,6 +12,7 @@ import { ArtifactContext } from '../components/Dashboard/DashboardContext';
 import { Sidebar } from '../components/Dashboard/Sidebar';
 import { ArtifactPanel } from '../components/Dashboard/ArtifactPanel';
 import { MemoizedMessageRow, StaticStitchLogo, StitchLogo } from '../components/Dashboard/MessageRow';
+import ChatsManagement from '../components/Dashboard/ChatsManagement';
 import { useSpeech } from '../hooks/useSpeech';
 import { generatePDFThumbnail } from '../utils/pdfUtils';
 import * as chatService from '../services/chatService';
@@ -90,8 +91,12 @@ const Dashboard = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showNetworkError, setShowNetworkError] = useState(false);
+  const [tokenUsage, setTokenUsage] = useState({ prompt: 0, completion: 0, total: 0 });
+  const [showContextWarning, setShowContextWarning] = useState(false);
+  const [contextLimit, setContextLimit] = useState(128000); // Default 128k
 
   const [recentChats, setRecentChats] = useState([]);
+  const [activeView, setActiveView] = useState('chat-thread'); // 'chat-thread' | 'chats-view'
   const [currentFileId, setCurrentFileId] = useState(null);
   const currentFileIdRef = useRef(null);
   const backgroundStreamsRef = useRef({});
@@ -144,6 +149,28 @@ const Dashboard = () => {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showModelDropdown]);
+
+  // Update context limit based on selected model
+  useEffect(() => {
+    const limits = {
+        'docmind-ai': 128000,
+        'deep-reasoner': 64000,
+        'vision-pro': 128000,
+        'code-expert': 128000
+    };
+    if (limits[selectedModel]) {
+        setContextLimit(limits[selectedModel]);
+    }
+  }, [selectedModel]);
+
+  // Handle context warning threshold (85%)
+  useEffect(() => {
+    if (contextLimit > 0 && tokenUsage.total / contextLimit > 0.85) {
+        setShowContextWarning(true);
+    } else {
+        setShowContextWarning(false);
+    }
+  }, [tokenUsage.total, contextLimit]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -252,6 +279,7 @@ const Dashboard = () => {
     setCurrentFileId(null);
     setActiveArtifact(null);
     setChatTitle('');
+    setActiveView('chat-thread');
     if (textareaRef.current) textareaRef.current.focus();
   };
 
@@ -280,6 +308,7 @@ const Dashboard = () => {
   const loadChat = async (fileId) => {
     try {
       setActiveArtifact(null);
+      setActiveView('chat-thread');
       const googleToken = localStorage.getItem('google_access_token');
       const data = await chatService.fetchChatContent(fileId, googleToken);
 
@@ -524,18 +553,37 @@ const Dashboard = () => {
     }
   };
 
-  const handleRenameChat = async (newName) => {
-    if (!currentFileId || !newName.trim()) return;
+  const handleRenameChat = async (newName, fileId = null) => {
+    const targetFileId = fileId || currentFileId;
+    if (!targetFileId || !newName.trim()) return;
     try {
       const googleToken = localStorage.getItem('google_access_token');
       if (!googleToken) return;
-      const data = await chatService.renameChat(currentFileId, newName.trim(), googleToken);
+      const data = await chatService.renameChat(targetFileId, newName.trim(), googleToken);
       if (data.success) {
-        setChatTitle(newName.trim());
+        if (targetFileId === currentFileId) {
+          setChatTitle(newName.trim());
+        }
         fetchRecentChats();
       }
     } catch (err) {
       console.error("Failed to rename chat", err);
+    }
+  };
+
+  const handleToggleStar = async (fileId, currentStarred) => {
+    if (!fileId) return;
+    try {
+      const googleToken = localStorage.getItem('google_access_token');
+      if (!googleToken) return;
+      const newState = !currentStarred;
+      const data = await chatService.toggleStar(fileId, newState, googleToken);
+      if (data.success) {
+        // Optimistically update local state if needed, or just refetch
+        fetchRecentChats();
+      }
+    } catch (err) {
+      console.error("Failed to toggle star", err);
     }
   };
 
@@ -976,6 +1024,14 @@ const Dashboard = () => {
                   hasUpdates = true;
                 }
               }
+
+              if (data.usage) {
+                setTokenUsage({
+                    prompt: data.usage.prompt_tokens,
+                    completion: data.usage.completion_tokens,
+                    total: data.usage.total_tokens
+                });
+              }
             } catch (err) { console.warn('Error parsing JSON from stream', err, dataStr); }
           }
         }
@@ -1145,12 +1201,13 @@ const Dashboard = () => {
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
           setIsSearchModalOpen={setIsSearchModalOpen}
-          newChat={newChat}
-          searchQuery={searchQuery}
           recentChats={recentChats}
           currentFileId={currentFileId}
           loadChat={loadChat}
+          newChat={newChat}
           deleteChat={deleteChat}
+          setActiveView={setActiveView}
+          activeView={activeView}
           user={user}
           showProfileMenu={showProfileMenu}
           setShowProfileMenu={setShowProfileMenu}
@@ -1233,7 +1290,30 @@ const Dashboard = () => {
               </div>
             )}
 
+            {showContextWarning && (
+              <div className="network-error-toast context-warning show">
+                <div className="toast-left">
+                  <AlertTriangle size={20} className="warning-icon-svg" />
+                  <span className="toast-message">
+                    Conversation approaching context limit ({Math.round((tokenUsage.total / contextLimit) * 100)}%). Consider starting a new chat for better performance.
+                  </span>
+                </div>
+                <button className="toast-close" onClick={() => setShowContextWarning(false)}>
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+
             <div className="header-right-controls" style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginLeft: 'auto' }}>
+              {tokenUsage.total > 0 && (
+                <div className={`token-usage-indicator ${tokenUsage.total / contextLimit > 0.8 ? 'critical' : ''}`}>
+                  <Blocks size={14} />
+                  <span>{Math.round(tokenUsage.total / 1000)}k / {Math.round(contextLimit / 1000)}k tokens</span>
+                  <div className="usage-progress-bar">
+                    <div className="usage-progress-fill" style={{ width: `${Math.min((tokenUsage.total / contextLimit) * 100, 100)}%` }}></div>
+                  </div>
+                </div>
+              )}
               {isSaving && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#888' }}>
                   <HardDrive size={14} className="saving-spinner" /> Saving to Drive...
@@ -1243,7 +1323,18 @@ const Dashboard = () => {
           </header>
 
           <div className="workspace-body">
-            <div className={`workspace-content ${messages.length === 0 ? 'empty' : ''}`}>
+            {activeView === 'chats-view' ? (
+              <ChatsManagement 
+                recentChats={recentChats}
+                loadChat={loadChat}
+                deleteChat={deleteChat}
+                newChat={newChat}
+                renameChat={handleRenameChat}
+                toggleStar={handleToggleStar}
+                fetchRecentChats={fetchRecentChats}
+              />
+            ) : (
+              <div className={`workspace-content ${messages.length === 0 ? 'empty' : ''}`}>
               {messages.length === 0 && (
                 <div className="welcome-state">
                   <div className="greeting">
@@ -1555,8 +1646,9 @@ const Dashboard = () => {
                       )}
                     </div>
                   </div>
+                </div>
 
-                  {activeTemplateMenu && messages.length === 0 && (() => {
+                {activeTemplateMenu && messages.length === 0 && (() => {
                     const optionsMap = {
                       'code': [
                         "Develop algorithm solutions",
@@ -1641,21 +1733,27 @@ const Dashboard = () => {
                   </div>
                 )}
               </div>
-            </div>
+            )}
 
-            <ArtifactPanel
-              activeArtifact={activeArtifact} messages={messages} isStreaming={isStreaming}
-              artifactWidth={artifactWidth} isResizingRef={isResizingRef} setArtifactWidth={setArtifactWidth}
-              artifactCopied={artifactCopied} setArtifactCopied={setArtifactCopied}
-              artifactDropdownOpen={artifactDropdownOpen} setArtifactDropdownOpen={setArtifactDropdownOpen}
-              artifactRefreshing={artifactRefreshing} setArtifactRefreshing={setArtifactRefreshing}
-              setActiveArtifact={setActiveArtifact} artifactScrollRef={artifactScrollRef}
-              handleArtifactScroll={(e) => {
-                const { scrollTop, scrollHeight, clientHeight } = e.target;
-                userScrolledArtifactRef.current = Math.ceil(scrollTop + clientHeight) < scrollHeight - 30;
-              }}
-              userScrolledArtifactRef={userScrolledArtifactRef}
-            />
+            {activeView !== 'chats-view' && (
+              <ArtifactPanel
+                activeArtifact={activeArtifact}
+                setActiveArtifact={setActiveArtifact}
+                messages={messages}
+                isStreaming={isStreaming}
+                artifactDropdownOpen={artifactDropdownOpen}
+                setArtifactDropdownOpen={setArtifactDropdownOpen}
+                artifactWidth={artifactWidth}
+                setArtifactWidth={setArtifactWidth}
+                artifactCopied={artifactCopied}
+                setArtifactCopied={setArtifactCopied}
+                artifactRefreshing={artifactRefreshing}
+                setArtifactRefreshing={setArtifactRefreshing}
+                isResizingRef={isResizingRef}
+                artifactScrollRef={artifactScrollRef}
+                userScrolledArtifactRef={userScrolledArtifactRef}
+              />
+            )}
           </div>
         </div>
 
@@ -1668,10 +1766,10 @@ const Dashboard = () => {
                 <button className="icon-btn close-btn" onClick={() => { setIsSearchModalOpen(false); setSearchQuery(''); }}><X size={18} /></button>
               </div>
               <div className="search-modal-results">
-                {recentChats.filter(chat => chat.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 ? <div className="search-no-results">No results found</div> :
-                  recentChats.filter(chat => chat.name.toLowerCase().includes(searchQuery.toLowerCase())).map(chat => (
+                {recentChats.filter(chat => (chat.name || '').toLowerCase().includes((searchQuery || '').toLowerCase())).length === 0 ? <div className="search-no-results">No results found</div> :
+                  recentChats.filter(chat => (chat.name || '').toLowerCase().includes((searchQuery || '').toLowerCase())).map(chat => (
                     <div key={chat.id} className="search-result-item" onClick={() => { loadChat(chat.id); setIsSearchModalOpen(false); setSearchQuery(''); }}>
-                      <div className="search-result-left"><MessageCircle size={16} /><span>{chat.name.replace('DocMind_Chat_', '').replace('.md', '').replaceAll('_', ' ')}</span></div>
+                      <div className="search-result-left"><MessageCircle size={16} /><span>{(chat.name || '').replace('DocMind_Chat_', '').replace('.md', '').replaceAll('_', ' ')}</span></div>
                       <div className="search-result-right">
                         <span className="search-result-date normal-only">{formatRelativeTime(chat.modifiedTime || chat.createdTime)}</span>
                         <span className="search-result-date hover-only">Enter</span>

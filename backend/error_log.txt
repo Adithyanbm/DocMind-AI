@@ -224,3 +224,83 @@ Model used: deepseek-ai/deepseek-v3.2
 Error: Connection error.
 Messages count: 1
 Model used: deepseek-ai/deepseek-v3.2
+
+Error: Request timed out.
+Messages count: 1
+Model used: z-ai/glm5
+
+Error: 
+Messages count: 5
+Model used: minimaxai/minimax-m2.5
+
+Error: 'coroutine' object is not iterable
+Messages count: 5
+Model used: minimaxai/minimax-m2.5
+
+Error: The read operation timed out
+Messages count: 5
+Model used: minimaxai/minimax-m2.5
+
+Error: Connection error.
+Messages count: 1
+Model used: z-ai/glm5
+
+Error: The read operation timed out
+Messages count: 1
+Model used: minimaxai/minimax-m2.5
+
+Error: Request timed out.
+Messages count: 3
+Model used: z-ai/glm5
+
+Error: Request timed out.
+Messages count: 5
+Model used: z-ai/glm5
+
+Error: Request timed out.
+Messages count: 3
+Model used: z-ai/glm5
+
+Error: Request timed out.
+Messages count: 3
+Model used: z-ai/glm5
+
+Error: Request timed out.
+Messages count: 1
+Model used: minimaxai/minimax-m2.5
+
+Error: Request timed out.
+Messages count: 1
+Model used: minimaxai/minimax-m2.5
+
+Error: Request timed out.
+Messages count: 1
+Model used: minimaxai/minimax-m2.5
+
+Error: Request timed out.
+Messages count: 1
+Model used: minimaxai/minimax-m2.5
+
+Error: Request timed out.
+Messages count: 1
+Model used: minimaxai/minimax-m2.5
+
+Error: Request timed out.
+Messages count: 1
+Model used: minimaxai/minimax-m2.5
+
+Error: Request timed out.
+Messages count: 1
+Model used: minimaxai/minimax-m2.5
+
+Error: Request timed out.
+Messages count: 1
+Model used: minimaxai/minimax-m2.5
+
+Error: Request timed out.
+Messages count: 1
+Model used: minimaxai/minimax-m2.5
+
+Error: Request timed out.
+Messages count: 1
+Model used: minimaxai/minimax-m2.5

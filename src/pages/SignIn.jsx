@@ -13,13 +13,19 @@ const SignIn = () => {
   const { login, loginWithGoogle } = useAuth();
   
   const loginWithGoogleFlow = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
+    onSuccess: async (codeResponse) => {
+      console.log('Google login code received in SignIn component');
       setIsSubmitting(true);
       setError('');
-      // tokenResponse.access_token contains the token with Drive scopes
-      const result = await loginWithGoogle(tokenResponse.access_token);
-      if (!result.success) {
-        setError(result.error || 'Google Sign-In failed');
+      try {
+        const result = await loginWithGoogle(codeResponse.code);
+        if (!result.success) {
+          setError(result.error || 'Google Sign-In failed');
+          setIsSubmitting(false);
+        }
+      } catch (err) {
+        console.error('SignIn onSuccess error:', err);
+        setError('An unexpected error occurred during Google Sign-In');
         setIsSubmitting(false);
       }
     },
@@ -27,8 +33,8 @@ const SignIn = () => {
       console.error('Google Login Error:', error);
       setError('Google Sign-In was unsuccessful. Try again.');
     },
-    // We need both email/profile (default) AND drive.file
-    scope: 'https://www.googleapis.com/auth/drive.file'
+    flow: 'auth-code',
+    scope: 'openid email profile https://www.googleapis.com/auth/drive.file'
   });
 
   const handleSignIn = async (e) => {

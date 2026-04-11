@@ -86,9 +86,19 @@
 .artifact-header-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .artifact-action-btn { background: transparent; border: none; color: var(--claude-text-muted); cursor: pointer; padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
 .artifact-action-btn:hover { background: var(--claude-hover); color: var(--claude-text-main); }
+.artifact-action-btn.active { background: var(--claude-hover); color: var(--claude-accent); }
 .artifact-action-btn.close:hover { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
 
-.artifact-panel-body { flex: 1; overflow: auto; background-color: #1e1e1e; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.08) transparent; }
+.artifact-panel-body { 
+  flex: 1; 
+  overflow: auto; 
+  overflow-x: auto; 
+  background-color: #1e1e1e; 
+  scrollbar-width: thin; 
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent; 
+  display: flex;
+  flex-direction: column;
+}
 .claude-dashboard.theme-light .artifact-panel-body { background-color: #fafafa; }
 .artifact-panel-body::-webkit-scrollbar { width: 6px; height: 6px; }
 .artifact-panel-body::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.08); border-radius: 3px; }
@@ -103,23 +113,23 @@
 
 .artifact-side-panel ::selection { background-color: rgba(229, 147, 103, 0.25) !important; color: inherit !important; }
 
-/* View Toggle */
+/* View Toggle - Pill Style */
 .artifact-view-toggle {
   display: flex;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--claude-border);
-  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
   padding: 2px;
-  margin-left: 12px;
+  flex-shrink: 0;
 }
 
 .view-toggle-btn {
   background: transparent;
   border: none;
-  color: var(--claude-text-muted);
+  color: rgba(255, 255, 255, 0.5);
   cursor: pointer;
-  padding: 4px 10px;
-  border-radius: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -127,13 +137,37 @@
 }
 
 .view-toggle-btn:hover {
-  color: var(--claude-text-main);
+  color: #fff;
 }
 
 .view-toggle-btn.active {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   color: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Header Title Formatting */
+.artifact-header-title { 
+  font-weight: 550; 
+  font-size: 0.88rem; 
+  color: var(--claude-text-main); 
+  display: flex; 
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-header-title-sep {
+  margin: 0 6px;
+  color: var(--claude-text-muted);
+  font-weight: normal;
+  font-size: 0.8rem;
+}
+
+.artifact-header-lang-tag {
+  color: var(--claude-text-muted);
+  font-weight: 400;
+  font-size: 0.82rem;
 }
 
 /* Preview Rendering */
@@ -153,5 +187,62 @@
   height: 100%;
   border: none;
   background: transparent;
+}
+
+/* New Preview Types */
+.svg-preview-container svg {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+}
+
+.markdown-preview-container {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+.markdown-preview-container h1, .markdown-preview-container h2, .markdown-preview-container h3 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.markdown-preview-container h1 { font-size: 2em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+.markdown-preview-container h2 { font-size: 1.5em; border-bottom: 1px solid #eaecef; padding-bottom: 0.3em; }
+
+.markdown-preview-container p { margin-top: 0; margin-bottom: 16px; }
+
+.markdown-preview-container code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  background-color: rgba(27,31,35,0.05);
+  border-radius: 3px;
+}
+
+.markdown-preview-container pre {
+  padding: 16px;
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  background-color: #f6f8fa;
+  border-radius: 3px;
+}
+
+.binary-preview-container button:hover {
+  filter: brightness(0.9);
+  transform: translateY(-1px);
+}
+
+.binary-preview-container button:active {
+  transform: translateY(0);
+}
+
+.code-preview-container pre {
+  margin: 0 !important;
+  border-radius: 0 !important;
 }
 

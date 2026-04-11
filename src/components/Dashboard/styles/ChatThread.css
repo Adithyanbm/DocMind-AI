@@ -311,7 +311,7 @@
   transition: color 0.2s;
 }
 .markdown-body a:hover { 
-  color: #FF6A00; 
+  color: var(--claude-accent); 
   text-decoration: underline; 
 }
 
@@ -358,7 +358,7 @@
 }
 
 .msg-action-btn.active {
-  color: var(--claude-accent, #FF6A00);
+  color: var(--claude-accent, var(--claude-accent));
   opacity: 1;
 }
 

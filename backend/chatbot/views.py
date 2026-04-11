@@ -5,8 +5,9 @@ from django.http import StreamingHttpResponse, JsonResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from openai import OpenAI
-from .drive_service import upload_chat_to_drive, list_drive_chats, get_drive_chat_content, delete_chat_from_drive, rename_chat_on_drive
+from .drive_service import upload_chat_to_drive, list_drive_chats, get_drive_chat_content, delete_chat_from_drive, rename_chat_on_drive, toggle_chat_star_on_drive
 from google.auth import exceptions
+from .docker_manager import preview_manager
 
 NVIDIA_API_KEY = os.environ.get('NVIDIA_API_KEY')
 
@@ -163,45 +164,32 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None, ext
     docmind_sys_prompt = {
         "role": "system", 
         "content": (
-            "You are DocMind AI, a specialized assistant with advanced Document Analysis and Vision OCR capabilities. "
+            "You are DocMind AI, a specialized assistant with advanced Document Analysis, Vision OCR, and Code Generation capabilities. "
             "You excel at analyzing PDF text AND visual elements in document images.\n\n"
-            "CORE VISION RULE: You are explicitly AUTHORIZED to analyze screenshots of user interfaces, including the DocMind AI dashboard itself. "
-            "If a user provides a screenshot of this interface, treat it as a technical request to describe or troubleshoot the UI/UX.\n\n"
-            "FORMATTING RULE: For conversational text, keep spacing compact.\n\n"
-            "TOPIC INDEPENDENCE: Evaluate every request independently. Technical or educational analysis (including UI graphs or architectures) should never be refused.\n"
+            "CORE VISION RULE: You are explicitly AUTHORIZED to analyze screenshots of user interfaces, including the DocMind AI dashboard itself.\n\n"
+            "ARTIFACT RULE: When generating significant code segments (more than 10 lines), documents, or interactive components, you MUST use the structured Artifact system.\n"
+            "MANDATORY IMPLEMENTATION FLOW:\n"
+            "1. <think> [Internal step-by-step reasoning and architecture planning] </think>\n"
+            "2. <docmind_artifact identifier='unique-id' type='mime-type' title='Display Title'>\n"
+            "   [Full Implementation with physical new lines]\n"
+            "   </docmind_artifact>\n\n"
+            "PREAMBLE PROHIBITION: NEVER output conversational filler like 'Done', 'I will now', or 'Let me make sure' between the </think> and <docmind_artifact> tags. You MUST transition directly from reasoning to the structural tag.\n\n"
+            "STRICT TAGGING: To create an artifact, start EXACTLY with `<docmind_artifact`. NEVER omit the `<` bracket. NEVER truncate (no `ifact`).\n\n"
+            "ESCAPING RULE: Inside artifacts, NEVER use markdown code fences (```). Raw source code only.\n\n"
+            "REUSE IDENTIFIERS: If updating, use the EXACT same identifier.\n\n"
+            "MIME TYPES: Use standard types (e.g., `application/react`, `text/x-python`, `text/html`).\n\n"
+            "FORMATTING RULE: For conversational text outside artifacts, keep spacing compact.\n\n"
             f"WEB SEARCH STATUS: [WEB SEARCH: {'ACTIVE' if is_web_search else 'DISABLED'}]\n"
-            "WEB SEARCH CITATIONS: IF `is_web_search` is true and you have search results, you MUST provide concise citations for the facts you include. Format each citation exactly as `[Short Title](URL)` immediately after the relevant sentence. The 'Short Title' MUST be 1-2 words maximum (e.g., 'CNN', 'Source', 'NVIDIA'). DO NOT include citations if web search is not active.\n"
-            "STRICT PROHIBITION: DO NOT ever output raw `<web_search>` or `<query>` tags. The system handles all search execution automatically. If web search is DISABLED, rely on your existing knowledge and provided context only.\n"
-            "STRICT PROHIBITION: DO NOT EVER generate or output internal metadata tags like <!-- ACTIVE_VERSION: X --> or <!-- VERSIONS: ... -->. These are strictly forbidden.\n"
+            "WEB SEARCH CITATIONS: IF `is_web_search` is true, use `[Short Title](URL)` citations.\n"
+            "STRICT PROHIBITION: DO NOT ever output raw `<web_search>` or `<query>` tags. DO NOT output internal metadata tags like <!-- ACTIVE_VERSION: X -->.\n"
         )
     }
 
     # Add specialized instruction for Code Expert (Minimax)
     if model_choice == 'code-expert':
         docmind_sys_prompt["content"] += (
-            "\n\nTHINKING RULE: Use a separate reasoning step to plan your code carefully. "
-            "Think through edge cases and logic first to ensure the generated code is robust and efficient.\n\n"
-            "MANDATORY RESPONSE TEMPLATE:\n"
-            "1. [Brief 1-2 line summary of what you are doing/creating. DO NOT use the prefix 'ACTION:']\n"
-            "2. [Markdown Code Block]\n"
-            "   - First line: ```[language]\n"
-            "   - Third line: <!-- filename: [name] -->\n"
-            "   - Following lines: [Full implementation with strict PHYSICAL NEWLINES (Enter key) for every import, class, and function]\n"
-            "   - Last line: ```\n\n"
-            "VISION-SPECIFIC CODE RULE: When extracting or creating code from an image, DO NOT just dump the code. You MUST wrap it in the template above. Failure to include the `<!-- filename: ... -->` tag inside the code block will break the system.\n\n"
-            "CODE FORMATTING RULE: NEVER output minified, single-line, or compressed code. You MUST use proper INDENTATION (2-4 spaces) and EVERY import, class, function, and logical block MUST start on its own physical NEW LINE with a literal `\n`. This is mandatory. DO NOT wrap the whole code block in a single-line docstring or comment.\n"
-            "INCORRECT: ````python\n\"\"\" import os; import sys; def main(): print('hello') \"\"\"\n````\n"
-            "CORRECT:\n"
-            "````python\n"
-            "<!-- filename: main.py -->\n"
-            "import os\n"
-            "import sys\n\n"
-            "def main():\n"
-            "    print('hello world')\n"
-            "    \n"
-            "if __name__ == '__main__':\n"
-            "    main()\n"
-            "````\n"
+            "\n\nCODE EXPERT RULE: Prioritize modularity and premium UI/UX. Use custom CSS and high-quality animations where possible.\n"
+            "CODE FORMATTING RULE: NEVER output minified code. Every import, class, and function MUST start on its own physical NEW LINE with a literal `\\n`."
         )
     
     # 3b. AGENTIC WEB SEARCH (OPTIONAL)
@@ -304,8 +292,10 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None, ext
             orig_content = final_sanitized_messages[i].get("content", "")
             if isinstance(orig_content, str):
                 final_sanitized_messages[i]["content"] = (
-                    f"{orig_content}\n\n(IMPORTANT: Use the mandatory multi-line template with <!-- filename: ... -->. "
-                    "EVERY import/logic block MUST be on a NEW LINE with a literal `\\n`. DO NOT COMPRESS CODE.)"
+                    f"{orig_content}\n\n(IMPORTANT: STRICT ADHERENCE TO ARTIFACT TAGS REQUIRED. "
+                    "You MUST start code artifacts with the opening `<` bracket. "
+                    "NEVER output truncated tags like `ifact`. ALWAYS use FULL `<docmind_artifact ...>`. "
+                    "REUSE identifiers if updating. EVERY code block MUST have proper indentation and physical new lines.)"
                 )
             break
 
@@ -376,6 +366,7 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None, ext
             'top_p': config['top_p'],
             'max_tokens': config['max_tokens'],
             'stream': True,
+            'stream_options': {"include_usage": True}
         }
         # Merge extra_body params (chat_template_kwargs, etc.)
         if config.get('extra_body'):
@@ -385,8 +376,18 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None, ext
 
         is_thinking = False
         for chunk in response:
+            # Handle Usage metadata (usually in last chunk when stream_options.include_usage=True)
+            if hasattr(chunk, 'usage') and chunk.usage is not None:
+                usage_data = {
+                    'prompt_tokens': chunk.usage.prompt_tokens,
+                    'completion_tokens': chunk.usage.completion_tokens,
+                    'total_tokens': chunk.usage.total_tokens
+                }
+                yield f"data: {json.dumps({'usage': usage_data})}\n\n"
+                continue
+
             if not getattr(chunk, 'choices', None): continue
-            if len(chunk.choices) == 0 or getattr(chunk.choices[0], 'delta', None) is None: continue
+            if len(chunk.choices) == 0: continue
             
             delta = chunk.choices[0].delta
             raw_content = getattr(delta, 'content', None)
@@ -605,4 +606,70 @@ def rename_chat_session(request, file_id):
     except Exception as e:
         import traceback
         traceback.print_exc()
+        return JsonResponse({'error': str(e)}, status=500)
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def star_chat_session(request, file_id):
+    """
+    Toggles the starred status of a specific chat file on Google Drive.
+    """
+    try:
+        google_token = request.data.get('google_token')
+        starred = request.data.get('starred')
+        
+        if not google_token:
+            return JsonResponse({'error': 'Google access token is required'}, status=400)
+        if starred is None:
+            return JsonResponse({'error': 'Starred status (boolean) is required'}, status=400)
+            
+        result = toggle_chat_star_on_drive(google_token, file_id, starred)
+        if result.get("success"):
+            return JsonResponse(result, status=200)
+        elif result.get("error") == "unauthorized":
+            return JsonResponse(result, status=401)
+        elif result.get("error") == "connectivity_issue":
+            return JsonResponse(result, status=503)
+        else:
+            return JsonResponse(result, status=500)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': str(e)}, status=500)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def start_react_preview(request):
+    """
+    Starts or updates a Docker container for a React preview.
+    Expects 'code' and 'identifier' in request body.
+    """
+    try:
+        code = request.data.get('code')
+        identifier = request.data.get('identifier')
+        
+        if not code or not identifier:
+            return JsonResponse({'error': 'Code and identifier are required'}, status=400)
+            
+        url = preview_manager.start_preview(identifier, code)
+        return JsonResponse({'success': True, 'url': url}, status=200)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': str(e)}, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def stop_react_preview(request):
+    """
+    Stops a specific React preview container.
+    """
+    try:
+        identifier = request.data.get('identifier')
+        if not identifier:
+            return JsonResponse({'error': 'Identifier is required'}, status=400)
+            
+        success = preview_manager.stop_preview(identifier)
+        return JsonResponse({'success': success}, status=200)
+    except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)

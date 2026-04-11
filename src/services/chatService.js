@@ -44,7 +44,8 @@ export const getChatCompletions = async (messages, signal, isWebSearchActive = f
   let token = localStorage.getItem('access');
   
   const makeRequest = async (authToken) => {
-    return fetch('http://localhost:8000/api/chat/completions/', {
+    // Use relative path so Vite proxy handles it
+    return fetch('/api/chat/completions/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -98,5 +99,17 @@ export const renameChat = async (fileId, newName, googleToken) => {
     return response.data;
   } catch (error) {
     throw error.response?.data || 'Failed to rename chat';
+  }
+};
+
+export const toggleStar = async (fileId, starred, googleToken) => {
+  try {
+    const response = await api.patch(`/chat/history/${fileId}/star/`, {
+      google_token: googleToken,
+      starred: starred
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || 'Failed to toggle star status';
   }
 };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Check, ChevronDown, RotateCcw, Eye, Code } from 'lucide-react';
+import { X, Check, ChevronDown, RotateCcw, Eye, Code, Maximize2, Minimize2 } from 'lucide-react';
 import { DebouncedSyntaxHighlighter } from './CodeBlock';
 import { extractArtifacts } from '../../utils/dashboardUtils';
 import ArtifactPreview from './ArtifactPreview';
@@ -23,22 +23,45 @@ export const ArtifactPanel = ({
   userScrolledArtifactRef 
 }) => {
   const [viewMode, setViewMode] = React.useState('code'); // 'code' or 'preview'
-  if (!activeArtifact) return null;
+  const [isWideView, setIsWideView] = React.useState(false);
 
   // Derive live code from messages — updates automatically when messages change during streaming
-  const liveMsg = messages[activeArtifact.msgIdx];
+  const liveMsg = activeArtifact ? messages[activeArtifact.msgIdx] : null;
   const liveArtifacts = liveMsg ? extractArtifacts(liveMsg.content).artifacts : [];
-  // Fingerprint match: find artifact whose code starts with the stored snapshot prefix
-  const fingerprint = (activeArtifact.codeSnapshot || '').slice(0, 80);
-  const liveArt = fingerprint
-    ? (liveArtifacts.find(a => a.code.startsWith(fingerprint)) ?? liveArtifacts[activeArtifact.artIdx])
-    : liveArtifacts[activeArtifact.artIdx];
+  
+  // Matching logic: 
+  // 1. If we have a structured identifier, use it FIRST.
+  // 2. Otherwise fall back to fingerprint matching (for legacy snippets).
+  let liveArt = null;
+  if (activeArtifact?.isStructured && activeArtifact?.identifier) {
+    liveArt = liveArtifacts.find(a => a.identifier === activeArtifact.identifier);
+  }
+  
+  if (activeArtifact && !liveArt) {
+      const fingerprint = (activeArtifact.codeSnapshot || '').slice(0, 80);
+      liveArt = fingerprint
+        ? (liveArtifacts.find(a => a.code.startsWith(fingerprint)) ?? liveArtifacts[activeArtifact.artIdx])
+        : liveArtifacts[activeArtifact.artIdx];
+  }
+
   // Always fall back to the snapshot stored at click time so no "Generating code..."
-  const rawLiveCode = (liveArt?.code && liveArt.code.length >= (activeArtifact.codeSnapshot || '').length)
+  const rawLiveCode = (activeArtifact && liveArt?.code && liveArt.code.length >= (activeArtifact.codeSnapshot || '').length)
     ? liveArt.code
-    : (activeArtifact.codeSnapshot || liveArt?.code || '');
-  const liveCode = rawLiveCode; // It's already cleaned by extractArtifacts
-  const liveLang = liveArt?.lang ?? activeArtifact.lang ?? 'text';
+    : (activeArtifact ? (activeArtifact.codeSnapshot || liveArt?.code || '') : '');
+  const liveCode = rawLiveCode; 
+  const liveLang = liveArt?.lang ?? activeArtifact?.lang ?? 'text';
+  const liveFileName = liveArt?.fileName || activeArtifact?.fileName || `artifact.${liveLang}`;
+
+  // Auto-switch to preview for non-code types
+  React.useEffect(() => {
+    if (!activeArtifact) return;
+    const previewOnlyTypes = ['pdf', 'docx', 'xlsx', 'pptx', 'markdown', 'md', 'svg', 'mermaid'];
+    if (previewOnlyTypes.includes(liveLang)) {
+      setViewMode('preview');
+    }
+  }, [liveLang, activeArtifact]);
+
+  if (!activeArtifact) return null;
 
   return (
     <>
@@ -56,12 +79,9 @@ export const ArtifactPanel = ({
       <div className="artifact-side-panel" style={{ width: artifactWidth ? `${artifactWidth}px` : '50%', flex: artifactWidth ? 'none' : '1', maxWidth: 'none' }}>
          <div className="artifact-panel-header" style={{ justifyContent: 'space-between' }}>
             <div className="artifact-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-               <div className="artifact-header-title" style={{ marginRight: '4px' }}>
-                 {liveArt?.fileName || activeArtifact.fileName || `artifact.${liveLang}`}
-               </div>
-
-                {/* View Toggle */}
-                {(liveLang === 'html' || liveLang === 'svg' || liveLang === 'jsx' || liveLang === 'tsx' || liveLang === 'css') && (
+                
+                {/* View Toggle - ONLY for renderable code */}
+                {(['html', 'svg', 'jsx', 'tsx', 'markdown', 'md', 'css'].includes(liveLang)) && (
                   <div className="artifact-view-toggle">
                     <button 
                        className={`view-toggle-btn ${viewMode === 'preview' ? 'active' : ''}`}
@@ -79,6 +99,22 @@ export const ArtifactPanel = ({
                     </button>
                   </div>
                 )}
+
+                {/* Wide View Toggle */}
+                {viewMode === 'preview' && (
+                  <button 
+                    className={`artifact-action-btn ${isWideView ? 'active' : ''}`}
+                    onClick={() => setIsWideView(!isWideView)}
+                    title={isWideView ? "Standard View" : "Wide View (Enables scrolling)"}
+                    style={{ marginLeft: '4px' }}
+                  >
+                    {isWideView ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                  </button>
+                )}
+
+               <div className="artifact-header-title">
+                 {liveArt?.title || activeArtifact?.title || "Snippet"} <span className="artifact-header-title-sep">·</span> <span className="artifact-header-lang-tag">{liveLang.toUpperCase()}</span>
+               </div>
 
                {isStreaming && activeArtifact.msgIdx === messages.length - 1 && (
                    <div className="artifact-header-live">
@@ -154,7 +190,13 @@ export const ArtifactPanel = ({
          <div className="artifact-panel-body" ref={artifactScrollRef} onScroll={handleArtifactScroll}>
             {liveCode ? (
               viewMode === 'preview' ? (
-                <ArtifactPreview code={liveCode} lang={liveLang} />
+                                <ArtifactPreview 
+                  code={liveCode} 
+                  lang={liveLang} 
+                  fileName={liveFileName} 
+                  identifier={activeArtifact.identifier || liveArt?.identifier || 'snippet'}
+                  isWideView={isWideView} 
+                />
               ) : (
                 <DebouncedSyntaxHighlighter
                   code={liveCode}

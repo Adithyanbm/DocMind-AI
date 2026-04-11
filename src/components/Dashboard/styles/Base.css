@@ -1,11 +1,11 @@
 /* src/components/Dashboard/styles/Base.css */
 .claude-dashboard {
   --claude-bg-main: #262624;
-  --claude-bg-sidebar: #262624;
+  --claude-bg-sidebar: #252423;
   --claude-text-main: #ffffff;
   --claude-text-muted: #a3a19b;
   --claude-border: rgba(255, 255, 255, 0.08);
-  --claude-accent: #d97757;
+  --claude-accent: #3b82f6;
   --claude-input-bg: #30302E;
   --claude-surface: #212121;
 
@@ -31,7 +31,7 @@
   --claude-text-main: #1a1a1a;
   --claude-text-muted: #6b6b6b;
   --claude-border: rgba(0, 0, 0, 0.08);
-  --claude-accent: #d97757;
+  --claude-accent: #3b82f6;
   --claude-input-bg: #ffffff;
   --claude-hover: rgba(0, 0, 0, 0.03);
 }

@@ -96,7 +96,7 @@ export const ArtifactTimelineContainer = ({ artifacts, isStreaming, openArtifact
                 }
 
                 return (
-                   <div key={idx} className="unified-timeline-item" onClick={() => openArtifact(idx, art.lang, art.code, art.fileName)}>
+                   <div key={idx} className="unified-timeline-item" onClick={() => openArtifact(art, idx)}>
                       <div className="timeline-document-icon">
                          <FileText size={16} />
                          <span className="timeline-filename-main">{art.fileDesc}</span>
@@ -111,6 +111,51 @@ export const ArtifactTimelineContainer = ({ artifacts, isStreaming, openArtifact
        </div>
     </div>
   );
+};
+
+const getArtifactTheme = (lang = '', fileName = '') => {
+  const extension = fileName.split('.').pop()?.toLowerCase() || lang.toLowerCase();
+  
+  switch (extension) {
+    case 'jsx':
+    case 'tsx':
+    case 'react':
+      return { 
+        color: '#61DAFB', 
+        icon: <Code size={18} />, 
+        label: 'React Component',
+        bgColor: 'rgba(97, 218, 251, 0.1)'
+      };
+    case 'html':
+      return { 
+        color: '#A855F7', 
+        icon: <Layout size={18} />, 
+        label: 'HTML Page',
+        bgColor: 'rgba(168, 85, 247, 0.1)'
+      };
+    case 'svg':
+      return { 
+        color: '#F59E0B', 
+        icon: <FileCode size={18} />, 
+        label: 'Vector Graphic',
+        bgColor: 'rgba(245, 158, 11, 0.1)'
+      };
+    case 'md':
+    case 'markdown':
+      return { 
+        color: '#3B82F6', 
+        icon: <FileText size={18} />, 
+        label: 'Markdown',
+        bgColor: 'rgba(59, 130, 246, 0.1)'
+      };
+    default:
+      return { 
+        color: '#94A3B8', 
+        icon: <FileText size={18} />, 
+        label: 'Code File',
+        bgColor: 'rgba(148, 163, 184, 0.1)'
+      };
+  }
 };
 
 export const ArtifactDownloadGrid = ({ artifacts, openArtifact }) => {
@@ -130,55 +175,48 @@ export const ArtifactDownloadGrid = ({ artifacts, openArtifact }) => {
   };
 
   return (
-    <div className="artifact-download-grid">
-      {artifacts.map((art, idx) => (
-        <div 
-          key={idx} 
-          className="artifact-download-card"
-          style={{ animationDelay: `${idx * 0.1}s` }}
-          onClick={() => openArtifact(idx, art.lang, art.code, art.fileName)}
-        >
-          <div className="artifact-card-left">
-            <div className="artifact-card-icon-box" style={{ background: 'transparent', border: 'none' }}>
-              <svg 
-                width="40" 
-                height="48" 
-                viewBox="0 0 110 136" 
-                xmlns="http://www.w3.org/2000/svg"
-                className="doc-icon-svg"
-              >
-                {/* Full user-provided SVG paths */}
-                <rect x="0" y="0" width="110" height="136" rx="20" fill="#2c2f2c"/>
-                <rect x="0.75" y="0.75" width="108.5" height="134.5" rx="19.5" fill="none" stroke="#484d48" strokeWidth="1.5"/>
-                <g transform="translate(28, 28)">
-                  <path d="M8 0 L38 0 L54 16 L54 68 L8 68 Z"
-                        fill="none"
-                        stroke="#9aa09a"
-                        strokeWidth="2.2"
-                        strokeLinejoin="round"
-                        strokeLinecap="round"/>
-                  <path d="M38 0 L38 16 L54 16"
-                        fill="none"
-                        stroke="#9aa09a"
-                        strokeWidth="2.2"
-                        strokeLinejoin="round"
-                        strokeLinecap="round"/>
-                </g>
-              </svg>
+    <div className="artifact-modern-grid">
+      {artifacts.map((art, idx) => {
+        const theme = getArtifactTheme(art.lang, art.fileName);
+        
+        return (
+          <div 
+            key={idx} 
+            className="artifact-premium-card"
+            style={{ '--theme-color': theme.color, '--theme-bg': theme.bgColor }}
+            onClick={() => openArtifact(art, idx)}
+          >
+            <div className="art-card-main">
+              <div className="art-card-icon-wrapper">
+                {theme.icon}
+              </div>
+              <div className="art-card-info">
+                <div className="art-card-name-row">
+                   <span className="art-card-filename">{art.fileName.split('.')[0]}</span>
+                   <span className="art-card-ext">.{art.fileName.split('.').pop()}</span>
+                </div>
+                <div className="art-card-label">{theme.label}</div>
+              </div>
+              <div className="art-card-actions">
+                <button className="art-view-btn">
+                  View
+                </button>
+              </div>
             </div>
-            <div className="artifact-card-details">
-              <span className="artifact-card-title">{art.fileName.split('.')[0]}</span>
-              <span className="artifact-card-subtitle">{art.lang.toUpperCase()}</span>
+            
+            <div className="art-card-bottom-actions">
+               <button 
+                  className="art-mini-download"
+                  onClick={(e) => handleDownload(e, art.fileName, art.code)}
+                  title="Download File"
+               >
+                  Download
+               </button>
             </div>
           </div>
-          <button 
-            className="artifact-card-download-btn"
-            onClick={(e) => handleDownload(e, art.fileName, art.code)}
-          >
-            Download
-          </button>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
+import { Eye, Layout, FileCode } from 'lucide-react';
