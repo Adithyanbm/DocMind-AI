@@ -3,8 +3,8 @@ import json
 import serpapi
 import requests
 from django.http import StreamingHttpResponse, JsonResponse, HttpResponse
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from openai import OpenAI
 from .drive_service import upload_chat_to_drive, list_drive_chats, get_drive_chat_content, delete_chat_from_drive, rename_chat_on_drive, toggle_chat_star_on_drive
 from google.auth import exceptions
@@ -761,6 +761,8 @@ def stop_react_preview(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 @api_view(['GET'])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def proxy_image(request):
     """
     Proxies external images to bypass CORS during PPTX export.
