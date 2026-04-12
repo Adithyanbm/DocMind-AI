@@ -148,19 +148,22 @@ export const ArtifactPanel = ({
                     onClick={async () => {
                       setIsExporting(true);
                       try {
-                        const data = JSON.parse(liveCode.trim());
+                        let cleaned = liveCode.trim();
+                        if (cleaned.startsWith('```')) {
+                           cleaned = cleaned.replace(/^```(json)?/, '').replace(/```$/, '').trim();
+                        }
+                        const data = JSON.parse(cleaned);
                         await handlePptxExport(data, liveFileName);
                       } catch (e) {
-                        alert("Error parsing presentation data.");
+                        console.error("PPTX Parse Error:", e);
+                        alert("Error parsing presentation data. The JSON might be malformed.");
                       } finally {
                         setIsExporting(false);
                       }
                     }}
                     title="Download as (.pptx)"
-                    style={{ background: '#10b981', color: 'white', borderRadius: '6px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', border: 'none' }}
                   >
                     {isExporting ? <RotateCcw size={14} className="spin-refresh" /> : <Download size={14} />}
-                    Download .pptx
                   </button>
                 ) : (
                   <div className="artifact-dropdown">
