@@ -34,7 +34,9 @@ const SignIn = () => {
       setError('Google Sign-In was unsuccessful. Try again.');
     },
     flow: 'auth-code',
-    scope: 'openid email profile https://www.googleapis.com/auth/drive.file'
+    scope: 'openid email profile https://www.googleapis.com/auth/drive.file',
+    access_type: 'offline',
+    prompt: 'consent',
   });
 
   const handleSignIn = async (e) => {

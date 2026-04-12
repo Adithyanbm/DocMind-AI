@@ -319,6 +319,8 @@ export const MemoizedMessageRow = memo(({ msg, user, msgIdx, isThisStreamingMsg,
     // Strip the raw thought process tags if the LLM hallucinates them
     text = text.replace(/<previous_thought_process>[\s\S]*?(<\/previous_thought_process>|$)/g, '');
     text = text.replace(/<search_results_metadata>[\s\S]*?(<\/search_results_metadata>|$)/g, '');
+    // Hide partial artifact tags during streaming to prevent UI flickering
+    text = text.replace(/<docmind_artifact\s*[^>]*?$/g, '');
     return text.trim();
   }, [msg.content]);
 

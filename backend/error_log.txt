@@ -304,3 +304,11 @@ Model used: minimaxai/minimax-m2.5
 Error: Request timed out.
 Messages count: 1
 Model used: minimaxai/minimax-m2.5
+
+Error: cannot access local variable 'leftover' where it is not associated with a value
+Messages count: 2
+Model used: z-ai/glm5
+
+Error: cannot access local variable 'leftover' where it is not associated with a value
+Messages count: 2
+Model used: z-ai/glm5

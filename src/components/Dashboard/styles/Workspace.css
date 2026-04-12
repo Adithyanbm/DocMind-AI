@@ -13,7 +13,11 @@
   align-items: center;
   padding: 0 16px;
   justify-content: flex-start;
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: var(--claude-bg-main, #000);
+  backdrop-filter: blur(10px);
   gap: 4px;
 }
 

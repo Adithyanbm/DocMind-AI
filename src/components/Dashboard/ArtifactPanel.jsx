@@ -113,7 +113,7 @@ export const ArtifactPanel = ({
                 )}
 
                <div className="artifact-header-title">
-                 {liveArt?.title || activeArtifact?.title || "Snippet"} <span className="artifact-header-title-sep">·</span> <span className="artifact-header-lang-tag">{liveLang.toUpperCase()}</span>
+                 {liveFileName} <span className="artifact-header-title-sep">·</span> <span className="artifact-header-lang-tag">{liveLang.toUpperCase()}</span>
                </div>
 
                {isStreaming && activeArtifact.msgIdx === messages.length - 1 && (

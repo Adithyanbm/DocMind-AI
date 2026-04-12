@@ -177,7 +177,7 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None, ext
             "STRICT TAGGING: To create an artifact, start EXACTLY with `<docmind_artifact`. NEVER omit the `<` bracket. NEVER truncate (no `ifact`).\n\n"
             "ESCAPING RULE: Inside artifacts, NEVER use markdown code fences (```). Raw source code only.\n\n"
             "REUSE IDENTIFIERS: If updating, use the EXACT same identifier.\n\n"
-            "MIME TYPES: Use standard types (e.g., `application/react`, `text/x-python`, `text/html`).\n\n"
+            "MIME TYPES: When using artifacts, use appropriate types for highlighting (e.g., `application/react` for components, `python`, `html`, `svg`, `markdown`, `bash`, `text/plain`).\n"
             "FORMATTING RULE: For conversational text outside artifacts, keep spacing compact.\n\n"
             f"WEB SEARCH STATUS: [WEB SEARCH: {'ACTIVE' if is_web_search else 'DISABLED'}]\n"
             "WEB SEARCH CITATIONS: IF `is_web_search` is true, use `[Short Title](URL)` citations.\n"
@@ -292,10 +292,7 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None, ext
             orig_content = final_sanitized_messages[i].get("content", "")
             if isinstance(orig_content, str):
                 final_sanitized_messages[i]["content"] = (
-                    f"{orig_content}\n\n(IMPORTANT: STRICT ADHERENCE TO ARTIFACT TAGS REQUIRED. "
-                    "You MUST start code artifacts with the opening `<` bracket. "
-                    "NEVER output truncated tags like `ifact`. ALWAYS use FULL `<docmind_artifact ...>`. "
-                    "REUSE identifiers if updating. EVERY code block MUST have proper indentation and physical new lines.)"
+                    f"{orig_content}\n\n(IMPORTANT: Use `<docmind_artifact identifier='...' type='...' title='...'>` for code or rendered content. Ensure the opening tag is complete and on its own line.)"
                 )
             break
 
@@ -375,6 +372,7 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None, ext
         response = client.chat.completions.create(**create_kwargs)
 
         is_thinking = False
+        leftover = ""
         for chunk in response:
             # Handle Usage metadata (usually in last chunk when stream_options.include_usage=True)
             if hasattr(chunk, 'usage') and chunk.usage is not None:
@@ -386,43 +384,76 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None, ext
                 yield f"data: {json.dumps({'usage': usage_data})}\n\n"
                 continue
 
-            if not getattr(chunk, 'choices', None): continue
-            if len(chunk.choices) == 0: continue
+            if not getattr(chunk, 'choices', None) or len(chunk.choices) == 0: continue
             
-            delta = chunk.choices[0].delta
-            raw_content = getattr(delta, 'content', None)
-            raw_reasoning = getattr(delta, 'reasoning_content', None)
+            # 1. Handle native reasoning and content in same chunk
+            raw_content = chunk.choices[0].delta.content or ""
+            raw_reasoning = getattr(chunk.choices[0].delta, 'reasoning_content', None) or ""
             
-            # 1. Native reasoning_content (e.g. GLM5, DeepSeek)
+            # First, yield native reasoning immediately to keep it fluid
             if raw_reasoning:
                 yield f"data: {json.dumps({'choices': [{'delta': {'content': None, 'reasoning_content': raw_reasoning}}]})}\n\n"
-                continue
-            
-            if not raw_content: continue
 
-            # 2. Extract tags from content (e.g. Minimax, Llama)
+            if not raw_content:
+                continue
+
+            # Combine with leftover from previous chunk
+            current_text = leftover + raw_content
+            leftover = ""
+
             output_content = None
             output_reasoning = None
 
-            # Logic to handle <think> block
-            if "<think>" in raw_content:
-                is_thinking = True
-                parts = raw_content.split("<think>", 1)
-                # Text before <think> is content, text after is reasoning
-                if parts[0]: output_content = parts[0]
-                if parts[1]: output_reasoning = parts[1]
-            elif "</think>" in raw_content:
-                is_thinking = False
-                parts = raw_content.split("</think>", 1)
-                # Text before </think> is reasoning, text after is content
-                if parts[0]: output_reasoning = parts[0]
-                if parts[1]: output_content = parts[1]
-            else:
-                # Ordinary streaming
-                if is_thinking:
-                    output_reasoning = raw_content
+            # Logic to handle <think> block transitions and partial tag protection
+            while current_text:
+                if not is_thinking:
+                    if "<think>" in current_text:
+                        is_thinking = True
+                        parts = current_text.split("<think>", 1)
+                        if parts[0]: 
+                            output_content = (output_content or "") + parts[0]
+                        current_text = parts[1]
+                        continue
+                    
+                    # Protected Tag Detection (buffer partial tags)
+                    found_partial = False
+                    # Buffer anything that looks like a prefix of target tags
+                    potential_tags = ["<think>", "<docmind_artifact"]
+                    for tag in potential_tags:
+                        for i in range(len(tag) - 1, 0, -1):
+                            if current_text.endswith(tag[:i]):
+                                leftover = tag[:i]
+                                output_content = (output_content or "") + current_text[:-i]
+                                current_text = ""
+                                found_partial = True
+                                break
+                        if found_partial: break
+                    
+                    if not found_partial:
+                        output_content = (output_content or "") + current_text
+                        current_text = ""
                 else:
-                    output_content = raw_content
+                    if "</think>" in current_text:
+                        is_thinking = False
+                        parts = current_text.split("</think>", 1)
+                        if parts[0]:
+                            output_reasoning = (output_reasoning or "") + parts[0]
+                        current_text = parts[1]
+                        continue
+                    
+                    # Protected Tag Detection for end of thinking block
+                    found_partial = False
+                    for i in range(len("</think>") - 1, 0, -1):
+                        if current_text.endswith("</think>"[:i]):
+                            leftover = "</think>"[:i]
+                            output_reasoning = (output_reasoning or "") + current_text[:-i]
+                            current_text = ""
+                            found_partial = True
+                            break
+                    
+                    if not found_partial:
+                        output_reasoning = (output_reasoning or "") + current_text
+                        current_text = ""
 
             if output_content is not None or output_reasoning is not None:
                 yield f"data: {json.dumps({
@@ -434,10 +465,21 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None, ext
                     }]
                 })}\n\n"
         
+        # If there's any leftover (e.g. stream ended on a partial tag), yield it
+        if leftover:
+            yield f"data: {json.dumps({
+                'choices': [{
+                    'delta': {
+                        'content': leftover if not is_thinking else None,
+                        'reasoning_content': leftover if is_thinking else None
+                    }
+                }]
+            })}\n\n"
+        
     except Exception as e:
         with open("error_log.txt", "a") as f:
             f.write(f"\nError: {str(e)}\n")
-            f.write(f"Messages count: {len(final_messages)}\n")
+            f.write(f"Messages count: {len(final_input_messages)}\n")
             f.write(f"Model used: {model_to_use}\n")
         
         # Send error in a format the frontend can handle
@@ -480,6 +522,7 @@ def save_to_drive(request):
         messages = request.data.get('messages', [])
         google_token = request.data.get('google_token')
         file_id = request.data.get('file_id') # Support updating existing file
+        token_usage = request.data.get('token_usage')
         
         if not messages:
             return JsonResponse({'error': 'Messages payload is required'}, status=400)
@@ -487,7 +530,7 @@ def save_to_drive(request):
         if not google_token:
             return JsonResponse({'error': 'Google access token is required'}, status=400)
             
-        result = upload_chat_to_drive(google_token, messages, file_id)
+        result = upload_chat_to_drive(request.user, google_token, messages, file_id, token_usage)
         
         if result.get("success"):
             return JsonResponse(result, status=200)
@@ -515,7 +558,7 @@ def get_chat_history(request):
         if not google_token:
             return JsonResponse({'error': 'Google access token is required'}, status=400)
             
-        result = list_drive_chats(google_token)
+        result = list_drive_chats(request.user, google_token)
         if result.get("success"):
             return JsonResponse(result, status=200)
         elif result.get("error") == "unauthorized":
@@ -540,7 +583,7 @@ def get_chat_session(request, file_id):
         if not google_token:
             return JsonResponse({'error': 'Google access token is required'}, status=400)
             
-        result = get_drive_chat_content(google_token, file_id)
+        result = get_drive_chat_content(request.user, google_token, file_id)
         if result.get("success"):
             return JsonResponse(result, status=200)
         elif result.get("error") == "unauthorized":
@@ -565,7 +608,7 @@ def delete_chat_session(request, file_id):
         if not google_token:
             return JsonResponse({'error': 'Google access token is required'}, status=400)
             
-        result = delete_chat_from_drive(google_token, file_id)
+        result = delete_chat_from_drive(request.user, google_token, file_id)
         if result.get("success"):
             return JsonResponse(result, status=200)
         elif result.get("error") == "unauthorized":
@@ -594,7 +637,7 @@ def rename_chat_session(request, file_id):
         if not new_name:
             return JsonResponse({'error': 'New name is required'}, status=400)
             
-        result = rename_chat_on_drive(google_token, file_id, new_name)
+        result = rename_chat_on_drive(request.user, google_token, file_id, new_name)
         if result.get("success"):
             return JsonResponse(result, status=200)
         elif result.get("error") == "unauthorized":

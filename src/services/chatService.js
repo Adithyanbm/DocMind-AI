@@ -18,12 +18,13 @@ export const fetchChatContent = async (fileId, googleToken) => {
   }
 };
 
-export const saveToDrive = async (messages, googleToken, fileId = null) => {
+export const saveToDrive = async (messages, googleToken, fileId = null, tokenUsage = null) => {
   try {
     const response = await api.post('/chat/save-to-drive/', {
       messages: messages.filter(m => m.role !== 'system'),
       google_token: googleToken,
-      file_id: fileId
+      file_id: fileId,
+      token_usage: tokenUsage
     });
     return response.data;
   } catch (error) {

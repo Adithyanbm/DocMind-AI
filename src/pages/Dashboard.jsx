@@ -92,6 +92,7 @@ const Dashboard = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showNetworkError, setShowNetworkError] = useState(false);
   const [tokenUsage, setTokenUsage] = useState({ prompt: 0, completion: 0, total: 0 });
+  const tokenUsageRef = useRef({ prompt: 0, completion: 0, total: 0 });
   const [showContextWarning, setShowContextWarning] = useState(false);
   const [contextLimit, setContextLimit] = useState(128000); // Default 128k
 
@@ -289,6 +290,9 @@ const Dashboard = () => {
       if (!googleToken) return;
 
       const data = await chatService.fetchHistory(googleToken);
+      if (data.new_google_token) {
+        localStorage.setItem('google_access_token', data.new_google_token);
+      }
       if (data.success) {
         setRecentChats(data.files);
       }
@@ -312,7 +316,28 @@ const Dashboard = () => {
       const googleToken = localStorage.getItem('google_access_token');
       const data = await chatService.fetchChatContent(fileId, googleToken);
 
+      if (data.new_google_token) {
+        localStorage.setItem('google_access_token', data.new_google_token);
+      }
+
       if (data.success) {
+        // Extract token usage if present
+        const tokenMatch = data.content.match(/<!-- TOKEN_USAGE: (.*?) -->/);
+        if (tokenMatch) {
+          try {
+            const usage = JSON.parse(tokenMatch[1]);
+            setTokenUsage(usage);
+            tokenUsageRef.current = usage;
+          } catch (e) {
+            console.error("Failed to parse token usage from chat content", e);
+          }
+        } else {
+            // Reset if not found (e.g. older files)
+            const fallbackUsage = { prompt: 0, completion: 0, total: 0 };
+            setTokenUsage(fallbackUsage);
+            tokenUsageRef.current = fallbackUsage;
+        }
+
         const parsedMessages = [];
         const blocks = data.content.split(/\*\*(You|DocMind AI):\*\*/).filter(Boolean);
 
@@ -505,7 +530,11 @@ const Dashboard = () => {
 
       setIsSaving(true);
       const fileIdToUse = overrideFileId !== undefined ? overrideFileId : currentFileIdRef.current;
-      const data = await chatService.saveToDrive(msgsToSave, googleToken, fileIdToUse);
+      const data = await chatService.saveToDrive(msgsToSave, googleToken, fileIdToUse, tokenUsageRef.current);
+
+      if (data.new_google_token) {
+        localStorage.setItem('google_access_token', data.new_google_token);
+      }
 
       if (data.success && data.file_id) {
         if (!fileIdToUse) {
@@ -540,6 +569,9 @@ const Dashboard = () => {
       if (!googleToken) return;
 
       const data = await chatService.deleteHistory(fileId, googleToken);
+      if (data.new_google_token) {
+        localStorage.setItem('google_access_token', data.new_google_token);
+      }
       if (data.success) {
         if (currentFileId === fileId) {
           setMessages([]);
@@ -560,6 +592,9 @@ const Dashboard = () => {
       const googleToken = localStorage.getItem('google_access_token');
       if (!googleToken) return;
       const data = await chatService.renameChat(targetFileId, newName.trim(), googleToken);
+      if (data.new_google_token) {
+        localStorage.setItem('google_access_token', data.new_google_token);
+      }
       if (data.success) {
         if (targetFileId === currentFileId) {
           setChatTitle(newName.trim());
@@ -578,6 +613,9 @@ const Dashboard = () => {
       if (!googleToken) return;
       const newState = !currentStarred;
       const data = await chatService.toggleStar(fileId, newState, googleToken);
+      if (data.new_google_token) {
+        localStorage.setItem('google_access_token', data.new_google_token);
+      }
       if (data.success) {
         // Optimistically update local state if needed, or just refetch
         fetchRecentChats();
@@ -876,6 +914,11 @@ const Dashboard = () => {
 
       if (targetUserIdx < 0 || messages[targetUserIdx].role !== 'user') return;
 
+      // If retrying the first prompt, reset token usage for a fresh start
+      if (targetUserIdx === 0) {
+        setTokenUsage({ prompt: 0, completion: 0, total: 0 });
+      }
+
       const targetUserMsg = messages[targetUserIdx];
       messagesToMap = messages.slice(0, targetUserIdx); // Get everything BEFORE the user message
 
@@ -1026,11 +1069,15 @@ const Dashboard = () => {
               }
 
               if (data.usage) {
-                setTokenUsage({
+              if (data.usage) {
+                const newUsage = {
                     prompt: data.usage.prompt_tokens,
                     completion: data.usage.completion_tokens,
                     total: data.usage.total_tokens
-                });
+                };
+                setTokenUsage(newUsage);
+                tokenUsageRef.current = newUsage;
+              }
               }
             } catch (err) { console.warn('Error parsing JSON from stream', err, dataStr); }
           }

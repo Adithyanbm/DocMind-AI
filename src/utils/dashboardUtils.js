@@ -91,6 +91,42 @@ export const mapLanguage = (lang) => {
 };
 
 /**
+ * Intelligent fallback to guess language from code content 
+ * if the MIME type is generic or missing.
+ */
+export const inferLanguageFromContent = (code, currentLang) => {
+  if (currentLang && currentLang !== 'text' && currentLang !== 'plain') return currentLang;
+  
+  const snippet = code.trim().slice(0, 1000);
+  
+  // React/JSX detection (most common source of "plain" errors)
+  if (
+    snippet.includes('import React') || 
+    snippet.includes('useState') || 
+    snippet.includes('useEffect') ||
+    snippet.includes('from \'antd\'') ||
+    snippet.includes('from "@ant-design/icons"') ||
+    (/<[A-Z][A-Za-z0-9]+\s*(?:\/|>)/.test(snippet)) || 
+    (snippet.includes('export default function') && snippet.includes('return ('))
+  ) {
+    return 'jsx';
+  }
+  
+  // Python detection
+  if (snippet.includes('def ') || (snippet.includes('import ') && snippet.includes(':'))) {
+    return 'python';
+  }
+  
+  // HTML/SVG detection
+  if (snippet.startsWith('<')) {
+    if (snippet.includes('<svg')) return 'svg';
+    if (snippet.includes('<div') || snippet.includes('<html') || snippet.includes('<!DOCTYPE')) return 'html';
+  }
+
+  return currentLang || 'text';
+};
+
+/**
  * Extract artifacts (code blocks) from message content
  */
 /**
@@ -104,11 +140,11 @@ export const extractArtifacts = (text) => {
   let lastArtifactEndIndex = -1;
 
   // 1. Match <docmind_artifact> tags (including streaming/unclosed tags)
-  // Reusable regex for attributes
-  const attrRegex = /(\w+)='([^']*)'/g;
+  // Reusable regex for attributes (supporting both single and double quotes)
+  const attrRegex = /(\w+)=['"]([^'"]*)['"]/g;
   
   // Tag regex: matches <docmind_artifact ...> and optional content + closing tag
-  const artifactRegex = /<docmind_artifact([^>]*?)>([\s\S]*?)(?:<\/docmind_artifact>|$)/g;
+  const artifactRegex = /<docmind_artifact\s+([^>]*?)>([\s\S]*?)(?:<\/docmind_artifact>|$)/g;
   
   let match;
   while ((match = artifactRegex.exec(text)) !== null) {
@@ -142,7 +178,10 @@ export const extractArtifacts = (text) => {
       'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx'
     };
     const rawLang = langMap[type] || type.split('/')[1]?.split('.')[0] || 'text';
-    const lang = mapLanguage(rawLang);
+    let lang = mapLanguage(rawLang);
+    
+    // Fallback: If we got 'text' or 'plain', try to infer better highlighting from content
+    lang = inferLanguageFromContent(codeContent, lang);
 
     if (firstArtifactIndex === -1) firstArtifactIndex = match.index;
     lastArtifactEndIndex = match.index + match[0].length;
