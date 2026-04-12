@@ -1,7 +1,8 @@
 import os
 import json
 import serpapi
-from django.http import StreamingHttpResponse, JsonResponse
+import requests
+from django.http import StreamingHttpResponse, JsonResponse, HttpResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from openai import OpenAI
@@ -758,3 +759,28 @@ def stop_react_preview(request):
         return JsonResponse({'success': success}, status=200)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+@api_view(['GET'])
+def proxy_image(request):
+    """
+    Proxies external images to bypass CORS during PPTX export.
+    """
+    url = request.GET.get('url')
+    if not url:
+        return HttpResponse("Missing URL", status=400)
+    
+    try:
+        # Fetch the image from the remote server
+        # Server-side calls are not blocked by browser CORS
+        response = requests.get(url, stream=True, timeout=10)
+        response.raise_for_status()
+        
+        # Return the binary content with original content type
+        return HttpResponse(
+            response.content,
+            content_type=response.headers.get('content-type', 'image/jpeg')
+        )
+    except Exception as e:
+        print(f"Proxy Image Error for {url}: {str(e)}")
+        # If proxy fails, return 404 to let frontend fallback handle it
+        return HttpResponse(f"Error fetching image: {str(e)}", status=404)

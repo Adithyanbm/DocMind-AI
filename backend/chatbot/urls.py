@@ -10,4 +10,5 @@ urlpatterns = [
     path('history/<str:file_id>/rename/', views.rename_chat_session, name='rename_chat_session'),
     path('preview/react/start/', views.start_react_preview, name='start_react_preview'),
     path('preview/react/stop/', views.stop_react_preview, name='stop_react_preview'),
+    path('proxy-image/', views.proxy_image, name='proxy_image'),
 ]

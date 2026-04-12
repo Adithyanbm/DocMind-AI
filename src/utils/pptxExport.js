@@ -8,8 +8,16 @@
 async function fetchImageAsBase64(url) {
   if (!url) return null;
   try {
-    const response = await fetch(url);
-    if (!response.ok) return null;
+    // We use a backend proxy to bypass CORS restrictions for external images.
+    // The proxy fetches the image on the server where CORS is not enforced.
+    const proxyUrl = "/api/proxy-image/?url=" + encodeURIComponent(url);
+    const response = await fetch(proxyUrl);
+    
+    if (!response.ok) {
+      console.warn(`Proxy failed to fetch image: ${url} (Status: ${response.status})`);
+      return null;
+    }
+    
     const blob = await response.blob();
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -18,7 +26,7 @@ async function fetchImageAsBase64(url) {
       reader.readAsDataURL(blob);
     });
   } catch (e) {
-    console.warn(`CORS/Fetch error for image: ${url}`, e);
+    console.warn(`Proxy/Fetch error for image: ${url}`, e);
     return null;
   }
 }
