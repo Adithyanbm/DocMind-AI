@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, Check, ChevronDown, RotateCcw, Eye, Code, Maximize2, Minimize2 } from 'lucide-react';
+import { X, Check, ChevronDown, RotateCcw, Eye, Code, Maximize2, Minimize2, Download, Presentation } from 'lucide-react';
+import { handlePptxExport } from '../../utils/pptxExport';
 import { DebouncedSyntaxHighlighter } from './CodeBlock';
 import { extractArtifacts } from '../../utils/dashboardUtils';
 import ArtifactPreview from './ArtifactPreview';
@@ -55,11 +56,27 @@ export const ArtifactPanel = ({
   // Auto-switch to preview for non-code types
   React.useEffect(() => {
     if (!activeArtifact) return;
-    const previewOnlyTypes = ['pdf', 'docx', 'xlsx', 'pptx', 'markdown', 'md', 'svg', 'mermaid'];
-    if (previewOnlyTypes.includes(liveLang)) {
+    const previewOnlyTypes = [
+      'pdf', 'docx', 'xlsx', 'pptx', 'markdown', 'md', 'svg', 'mermaid', 'application/vnd.docmind.pptx', 'presentation', 'vnd'
+    ];
+    if (previewOnlyTypes.includes(liveLang) || liveLang.includes('pptx')) {
       setViewMode('preview');
     }
   }, [liveLang, activeArtifact]);
+
+  const isPptx = React.useMemo(() => {
+    if (liveLang === 'pptx' || liveLang === 'presentation' || liveLang === 'application/vnd.docmind.pptx') return true;
+    try {
+      const trimmed = liveCode.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        const parsed = JSON.parse(trimmed);
+        return parsed.slides && Array.isArray(parsed.slides);
+      }
+    } catch (e) {}
+    return false;
+  }, [liveLang, liveCode]);
+
+  const [isExporting, setIsExporting] = React.useState(false);
 
   if (!activeArtifact) return null;
 
@@ -81,7 +98,7 @@ export const ArtifactPanel = ({
             <div className="artifact-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 
                 {/* View Toggle - ONLY for renderable code */}
-                {(['html', 'svg', 'jsx', 'tsx', 'markdown', 'md', 'css'].includes(liveLang)) && (
+                {(['html', 'svg', 'jsx', 'tsx', 'markdown', 'md', 'css', 'pptx', 'presentation', 'application/vnd.docmind.pptx', 'vnd'].includes(liveLang) || liveLang.includes('pptx')) && (
                   <div className="artifact-view-toggle">
                     <button 
                        className={`view-toggle-btn ${viewMode === 'preview' ? 'active' : ''}`}
@@ -124,54 +141,77 @@ export const ArtifactPanel = ({
                )}
             </div>
             <div className="artifact-header-actions" style={{ gap: '6px', display: 'flex', alignItems: 'center' }}>
-                <div className="artifact-dropdown">
-                   <button 
-                     className="artifact-dropdown-btn left" 
-                     onClick={() => {
-                         navigator.clipboard.writeText(liveCode);
-                         setArtifactCopied(true);
-                         setTimeout(() => setArtifactCopied(false), 2000);
-                     }} 
-                     style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: '60px', justifyContent: 'center' }}
-                     title="Copy"
-                   >
-                     {artifactCopied ? (
-                        <>
-                           <Check size={14} color="#10b981" /> 
-                           <span style={{ color: '#10b981' }}>Copied</span>
-                        </>
-                     ) : "Copy"}
-                   </button>
-                   <button 
-                     className="artifact-dropdown-btn right"
-                     onClick={(e) => {
-                       e.stopPropagation();
-                       setArtifactDropdownOpen(!artifactDropdownOpen);
-                     }}
-                     title="More Options"
-                   >
-                     <ChevronDown size={14} style={{ transform: artifactDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                   </button>
-                   {artifactDropdownOpen && (
-                     <div className="artifact-dropdown-content" style={{ display: 'flex' }}>
-                       <button className="artifact-dropdown-item" onClick={() => {
-                          const blob = new Blob([liveCode], { type: 'text/plain' });
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = liveArt?.fileName || `artifact.${liveLang}`;
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
-                          URL.revokeObjectURL(url);
-                          setArtifactDropdownOpen(false);
-                       }}>
-                          Download
-                       </button>
-                       <button className="artifact-dropdown-item" onClick={() => setArtifactDropdownOpen(false)}>Publish artifact</button>
-                     </div>
-                   )}
-                </div>
+                {isPptx ? (
+                  <button 
+                    className="artifact-action-btn"
+                    disabled={isExporting}
+                    onClick={async () => {
+                      setIsExporting(true);
+                      try {
+                        const data = JSON.parse(liveCode.trim());
+                        await handlePptxExport(data, liveFileName);
+                      } catch (e) {
+                        alert("Error parsing presentation data.");
+                      } finally {
+                        setIsExporting(false);
+                      }
+                    }}
+                    title="Download as (.pptx)"
+                    style={{ background: '#10b981', color: 'white', borderRadius: '6px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', border: 'none' }}
+                  >
+                    {isExporting ? <RotateCcw size={14} className="spin-refresh" /> : <Download size={14} />}
+                    Download .pptx
+                  </button>
+                ) : (
+                  <div className="artifact-dropdown">
+                    <button 
+                      className="artifact-dropdown-btn left" 
+                      onClick={() => {
+                          navigator.clipboard.writeText(liveCode);
+                          setArtifactCopied(true);
+                          setTimeout(() => setArtifactCopied(false), 2000);
+                      }} 
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: '60px', justifyContent: 'center' }}
+                      title="Copy"
+                    >
+                      {artifactCopied ? (
+                          <>
+                            <Check size={14} color="#10b981" /> 
+                            <span style={{ color: '#10b981' }}>Copied</span>
+                          </>
+                      ) : "Copy"}
+                    </button>
+                    <button 
+                      className="artifact-dropdown-btn right"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setArtifactDropdownOpen(!artifactDropdownOpen);
+                      }}
+                      title="More Options"
+                    >
+                      <ChevronDown size={14} style={{ transform: artifactDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                    </button>
+                    {artifactDropdownOpen && (
+                      <div className="artifact-dropdown-content" style={{ display: 'flex' }}>
+                        <button className="artifact-dropdown-item" onClick={() => {
+                            const blob = new Blob([liveCode], { type: 'text/plain' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = liveArt?.fileName || `artifact.${liveLang}`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                            setArtifactDropdownOpen(false);
+                        }}>
+                            Download
+                        </button>
+                        <button className="artifact-dropdown-item" onClick={() => setArtifactDropdownOpen(false)}>Publish artifact</button>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <button 
                   className="artifact-action-btn" 
                   title="Refresh"

@@ -177,20 +177,44 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None, ext
             "STRICT TAGGING: To create an artifact, start EXACTLY with `<docmind_artifact`. NEVER omit the `<` bracket. NEVER truncate (no `ifact`).\n\n"
             "ESCAPING RULE: Inside artifacts, NEVER use markdown code fences (```). Raw source code only.\n\n"
             "REUSE IDENTIFIERS: If updating, use the EXACT same identifier.\n\n"
-            "MIME TYPES: When using artifacts, use appropriate types for highlighting (e.g., `application/react` for components, `python`, `html`, `svg`, `markdown`, `bash`, `text/plain`).\n"
+            "MIME TYPES: When using artifacts, use appropriate types for highlighting (e.g., `application/react` for components, `python`, `html`, `svg`, `markdown`, `bash`, `text/plain`, `application/vnd.docmind.pptx`).\n"
             "FORMATTING RULE: For conversational text outside artifacts, keep spacing compact.\n\n"
+            "ARTIFACT CONTENT RULE: Every structural element (Import, Header, Table row, List item, Function) MUST be on its own physical NEW LINE. "
+            "NEVER combine multiple logical lines into one. Indentation is mandatory for readability.\n\n"
+            "PPTX ARTIFACT RULE: When asked to create a PowerPoint or Presentation, use `type: 'application/vnd.docmind.pptx'`. "
+            "The content MUST be a valid JSON object following this schema: "
+            "{ \"title\": \"Presentation Title\", \"theme\": \"modern-dark|elegant-white|corporate-blue\", \"slides\": [ "
+            "{ \"layout\": \"TITLE_SLIDE|BULLET_POINTS|SECTION_HEADER|IMAGE_CONTENT\", \"title\": \"Slide Title\", \"subtitle\": \"Optional Subtitle\", \"points\": [\"Point 1\", \"Point 2\"], \"speakerNotes\": \"Notes\", \"image\": \"Direct image URL\" } "
+            "] }. Every structural element in JSON must start on its own physical new line. "
+            "IMAGE SOURCES: If [WEB SEARCH] results contain '[IMAGE URL]' entries, you MUST prioritize these real-world URLs for the 'image' fields over any default providers like Unsplash.\n\n"
             f"WEB SEARCH STATUS: [WEB SEARCH: {'ACTIVE' if is_web_search else 'DISABLED'}]\n"
+
             "WEB SEARCH CITATIONS: IF `is_web_search` is true, use `[Short Title](URL)` citations.\n"
             "STRICT PROHIBITION: DO NOT ever output raw `<web_search>` or `<query>` tags. DO NOT output internal metadata tags like <!-- ACTIVE_VERSION: X -->.\n"
         )
     }
 
+    # 3a. TURN-AWARE REINFORCEMENT (Counteract positional drift in long conversations)
+    turn_count = len(final_sanitized_messages)
+    if turn_count > 6:
+        docmind_sys_prompt["content"] += (
+            "\n\nCRITICAL REMINDER (Long Conversation Mode):\n"
+            "You have reached a high turn count. YOUR ADHERENCE TO FORMATTING IS DEGRADING. "
+            "You MUST explicitly ensure every Markdown Header (##), Table Row (|), and List Item (-) starts on a fresh NEW LINE. "
+            "DO NOT squash text. DO NOT omit vertical spacing between blocks."
+        )
+
     # Add specialized instruction for Code Expert (Minimax)
     if model_choice == 'code-expert':
         docmind_sys_prompt["content"] += (
             "\n\nCODE EXPERT RULE: Prioritize modularity and premium UI/UX. Use custom CSS and high-quality animations where possible.\n"
-            "CODE FORMATTING RULE: NEVER output minified code. Every import, class, and function MUST start on its own physical NEW LINE with a literal `\\n`."
         )
+    
+    # Global Formatting Rule for all models
+    docmind_sys_prompt["content"] += (
+        "\nGLOBAL FORMATTING RULE: NEVER output minified code/markdown. Every structural unit MUST start on its own physical NEW LINE with a literal `\\n`."
+    )
+
     
     # 3b. AGENTIC WEB SEARCH (OPTIONAL)
     search_context = ""
@@ -200,9 +224,11 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None, ext
             search_decision_prompt = (
                 "You are an expert search assistant. Based on the conversation, decide if web searches are needed. "
                 "Output ONLY a JSON block containing a list of up to 2 parallel queries. "
-                "Use 'q' for query and 'engine' for the search engine (google, bing, youtube, etc). "
-                "If no search is needed, return empty list. "
-                "Example for single topic: {\"queries\": [{\"q\": \"PBKS vs CSK yesterday result\", \"engine\": \"google\"}]}. ONLY generate multiple queries if the user explicitly asks entirely disjoint questions."
+                "Use 'q' for query and 'engine' for the search engine ('google', 'bing', 'youtube', or 'google_images'). "
+                "PRIORITY: If the user asks for a presentation, deck, or 'relevant images' about a specific topic, you MUST perform a 'google_images' search "
+                "to find high-quality, direct image URLs. "
+                "Use 'q' for query and 'engine' for engine. Example: {\"queries\": [{\"q\": \"Mars Rover landing high res photo\", \"engine\": \"google_images\"}]}. "
+                "If no search is needed, return empty list."
             )
             
             decision_client = OpenAI(
@@ -218,12 +244,18 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None, ext
             )
             
             decision_text = decision_response.choices[0].message.content.strip()
-            if "```json" in decision_text:
-                decision_text = decision_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in decision_text:
-                decision_text = decision_text.split("```")[1].strip()
             
-            search_params = json.loads(decision_text)
+            # Robust JSON extraction
+            import re
+            json_match = re.search(r'(\{.*\})', decision_text, re.DOTALL)
+            if json_match:
+                decision_text = json_match.group(1)
+            
+            try:
+                search_params = json.loads(decision_text)
+            except (json.JSONDecodeError, TypeError):
+                search_params = {"queries": []}
+                
             queries = search_params.get("queries", [])
             
             if queries:
@@ -240,7 +272,17 @@ def stream_nvidia_response(messages, is_web_search=False, model_choice=None, ext
                     
                     search_results = s_client.search({"engine": search_engine, "q": search_q})
                     
-                    if "organic_results" in search_results:
+                    # Handle Image Results specifically
+                    if search_engine == 'google_images' and "images_results" in search_results:
+                        for img_res in search_results["images_results"][:8]:
+                            title = img_res.get('title', 'Image')
+                            img_url = img_res.get('original') or img_res.get('thumbnail')
+                            source = img_res.get('source', '')
+                            if img_url:
+                                all_snippets.append(f"- [IMAGE URL] {title} (Source: {source}): {img_url}")
+                    
+                    # Handle Organic Results
+                    elif "organic_results" in search_results:
                         ui_results = []
                         for res in search_results["organic_results"][:10]:
                             title = res.get('title', '')
