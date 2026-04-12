@@ -2,6 +2,27 @@
  * Utility to handle PPTX export using PptxGenJS
  * Loads the library dynamically if not present.
  */
+
+// Internal helper to fetch image and convert to base64
+// Handles CORS/network failures gracefully
+async function fetchImageAsBase64(url) {
+  if (!url) return null;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch (e) {
+    console.warn(`CORS/Fetch error for image: ${url}`, e);
+    return null;
+  }
+}
+
 export const handlePptxExport = async (data, fileName) => {
   try {
     if (!data || !data.slides) {
@@ -33,9 +54,16 @@ export const handlePptxExport = async (data, fileName) => {
     const textColor = currentTheme.text.replace('#', '');
     const accentColor = currentTheme.accent.replace('#', '');
 
-    data.slides.forEach(slide => {
+    // Processing slides. We use for...of to handle awaits correctly
+    for (const slide of data.slides) {
       const s = pres.addSlide();
       s.background = { fill: currentTheme.bg.replace('#', '') };
+
+      // Try to get base64 data for image if it exists
+      let imgData = null;
+      if (slide.image) {
+        imgData = await fetchImageAsBase64(slide.image);
+      }
 
       // Helper for backgrounds/overlays
       const addDarkOverlay = () => {
@@ -46,10 +74,9 @@ export const handlePptxExport = async (data, fileName) => {
       };
 
       if (slide.layout === 'TITLE_SLIDE') {
-        if (slide.image) {
-          s.addImage({ path: slide.image, x: 0, y: 0, w: '100%', h: '100%', sizing: { type: 'cover' } });
+        if (imgData) {
+          s.addImage({ data: imgData, x: 0, y: 0, w: '100%', h: '100%', sizing: { type: 'cover' } });
           addDarkOverlay();
-          // Adjust text to white for clarity over images
           const whiteColor = 'FFFFFF';
           s.addText(slide.title, { 
             x: 1, y: 2, w: '80%', fontSize: 48, color: whiteColor, bold: true, align: 'center' 
@@ -66,12 +93,12 @@ export const handlePptxExport = async (data, fileName) => {
           if (slide.subtitle) {
             s.addText(slide.subtitle, { 
               x: 1, y: 3.5, w: '80%', fontSize: 24, color: accentColor, align: 'center' 
-          });
+            });
           }
         }
       } else if (slide.layout === 'SECTION_HEADER') {
-        if (slide.image) {
-          s.addImage({ path: slide.image, x: 0, y: 0, w: '100%', h: '100%', sizing: { type: 'cover' } });
+        if (imgData) {
+          s.addImage({ data: imgData, x: 0, y: 0, w: '100%', h: '100%', sizing: { type: 'cover' } });
           addDarkOverlay();
           s.addText(slide.title, { 
             x: 1, y: 2.5, w: '80%', fontSize: 40, color: 'FFFFFF', bold: true, align: 'center' 
@@ -82,9 +109,8 @@ export const handlePptxExport = async (data, fileName) => {
           });
         }
       } else if (slide.layout === 'IMAGE_CONTENT' || (slide.image && slide.points)) {
-        // Grid Split: Image left (50%), Text right (45%)
-        if (slide.image) {
-          s.addImage({ path: slide.image, x: 0, y: 0, w: '50%', h: '100%', sizing: { type: 'cover' } });
+        if (imgData) {
+          s.addImage({ data: imgData, x: 0, y: 0, w: '50%', h: '100%', sizing: { type: 'cover' } });
           s.addText(slide.title, { 
             x: '55%', y: 0.5, w: '40%', fontSize: 28, color: textColor, bold: true 
           });
@@ -94,14 +120,12 @@ export const handlePptxExport = async (data, fileName) => {
             });
           }
         } else {
-          // Standard text slide
           s.addText(slide.title, { x: 0.5, y: 0.5, w: '90%', fontSize: 28, color: textColor, bold: true });
           if (slide.points) {
             s.addText(slide.points.map(p => "• " + p).join('\n'), { x: 0.5, y: 1.5, w: '90%', h: 3.5, fontSize: 18, color: textColor, valign: 'top' });
           }
         }
       } else {
-        // Default text slide fallback
         s.addText(slide.title, { x: 0.5, y: 0.5, w: '90%', fontSize: 28, color: textColor, bold: true });
         if (slide.points) {
           s.addText(slide.points.map(p => "• " + p).join('\n'), { x: 0.5, y: 1.5, w: '90%', h: 3.5, fontSize: 18, color: textColor, valign: 'top' });
@@ -111,7 +135,7 @@ export const handlePptxExport = async (data, fileName) => {
       if (slide.speakerNotes) {
         s.addNotes(slide.speakerNotes);
       }
-    });
+    }
 
     pres.writeFile({ fileName: `${pres.title.replace(/[<>:"/\\|?*]/g, '')}.pptx` });
   } catch (err) {
