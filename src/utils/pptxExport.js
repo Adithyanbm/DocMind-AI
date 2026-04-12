@@ -10,7 +10,7 @@ async function fetchImageAsBase64(url) {
   try {
     // We use a backend proxy to bypass CORS restrictions for external images.
     // The proxy fetches the image on the server where CORS is not enforced.
-    const proxyUrl = "/api/proxy-image/?url=" + encodeURIComponent(url);
+    const proxyUrl = "/api/chat/proxy-image/?url=" + encodeURIComponent(url);
     const response = await fetch(proxyUrl);
     
     if (!response.ok) {
